@@ -7,9 +7,19 @@ import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 
 type CarouselApi = UseEmblaCarouselType[1];
-type UseCarouselParameters = Parameters<typeof useEmblaCarousel>[0];
-type CarouselOptions = UseCarouselParameters[0];
-type CarouselPlugin = UseCarouselParameters[1];
+
+// Extract types from useEmblaCarousel parameters
+type UseEmblaCarouselParams = Parameters<typeof useEmblaCarousel>;
+type CarouselOptions = UseEmblaCarouselParams[0] extends [infer Options, ...any[]] 
+  ? Options 
+  : UseEmblaCarouselParams[0] extends readonly [infer Options, ...any[]]
+  ? Options
+  : UseEmblaCarouselParams[0];
+type CarouselPlugin = UseEmblaCarouselParams[0] extends [any, ...infer Rest] 
+  ? Rest[0] 
+  : UseEmblaCarouselParams[0] extends readonly [any, ...infer Rest]
+  ? Rest[0]
+  : UseEmblaCarouselParams[1];
 
 type CarouselProps = {
     opts?: CarouselOptions;
