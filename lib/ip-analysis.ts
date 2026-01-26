@@ -26,27 +26,55 @@ function getMaxMindReader(): ReturnType<typeof Reader.openBuffer> {
 
 /**
  * Lấy IP address từ request headers
- * Kiểm tra các headers phổ biến: x-forwarded-for, x-real-ip, cf-connecting-ip, x-client-ip
+ * Đơn giản: chỉ bỏ qua Vercel screenshot service, còn lại lấy IP đầu tiên từ headers
  */
 export function getClientIp(headers: Headers): string | null {
-  // Kiểm tra x-forwarded-for (thường có nhiều IP, lấy IP đầu tiên)
+  // Kiểm tra user-agent để phát hiện Vercel screenshot service
+  const userAgent = headers.get('user-agent') || '';
+  const isVercelScreenshot = userAgent.includes('vercel-screenshot') || 
+                             userAgent.includes('Vercel-Image-Optimization') ||
+                             userAgent.includes('vercel-bot');
+  
+  // Nếu là Vercel screenshot/bot, bỏ qua request này
+  if (isVercelScreenshot) {
+    return null;
+  }
+  
+  // Với Vercel, IP thật thường ở đầu chuỗi x-forwarded-for
+  // Format: "client-ip, proxy1-ip, proxy2-ip, ..."
   const xForwardedFor = headers.get('x-forwarded-for');
   if (xForwardedFor) {
-    const ips = xForwardedFor.split(',').map(ip => ip.trim());
-    if (ips.length > 0 && ips[0]) {
+    const ips = xForwardedFor.split(',').map(ip => ip.trim()).filter(ip => ip);
+    if (ips.length > 0) {
+      // Lấy IP đầu tiên (thường là client IP thật)
       return ips[0];
     }
   }
 
-  // Kiểm tra các headers khác
+  // Kiểm tra các headers khác theo thứ tự ưu tiên
   const xRealIp = headers.get('x-real-ip');
-  if (xRealIp) return xRealIp;
+  if (xRealIp) {
+    return xRealIp;
+  }
 
   const cfConnectingIp = headers.get('cf-connecting-ip');
-  if (cfConnectingIp) return cfConnectingIp;
+  if (cfConnectingIp) {
+    return cfConnectingIp;
+  }
 
   const xClientIp = headers.get('x-client-ip');
-  if (xClientIp) return xClientIp;
+  if (xClientIp) {
+    return xClientIp;
+  }
+
+  // Kiểm tra Vercel-specific header (nếu có)
+  const xVercelForwardedFor = headers.get('x-vercel-forwarded-for');
+  if (xVercelForwardedFor) {
+    const ips = xVercelForwardedFor.split(',').map(ip => ip.trim()).filter(ip => ip);
+    if (ips.length > 0) {
+      return ips[0];
+    }
+  }
 
   return null;
 }
@@ -223,6 +251,18 @@ export async function analyzeIpAccess(headers: Headers): Promise<IpAccessResult>
   try {
     // 1. Lấy IP từ request headers
     const ip = getClientIp(headers);
+    
+    // Debug: Log headers nếu không lấy được IP (chỉ trong development)
+    if (!ip && process.env.NODE_ENV === 'development') {
+      const userAgent = headers.get('user-agent') || '';
+      const xForwardedFor = headers.get('x-forwarded-for') || '';
+      console.log('Debug - Could not get IP:', {
+        userAgent,
+        xForwardedFor,
+        xRealIp: headers.get('x-real-ip'),
+        cfConnectingIp: headers.get('cf-connecting-ip'),
+      });
+    }
     
     if (!ip) {
       console.warn('Could not determine client IP address');

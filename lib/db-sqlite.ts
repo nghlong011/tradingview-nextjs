@@ -27,14 +27,29 @@ function getDatabase(): Database.Database {
       organization TEXT,
       asn INTEGER,
       timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
-      user_agent TEXT
+      user_agent TEXT,
+      headers TEXT
     );
 
+    -- Thêm cột headers nếu chưa tồn tại (migration)
+    -- SQLite không hỗ trợ ALTER TABLE ADD COLUMN IF NOT EXISTS, nên dùng try-catch
+    -- Hoặc chạy migration riêng nếu cần
+    
     CREATE INDEX IF NOT EXISTS idx_ip ON access_logs(ip);
     CREATE INDEX IF NOT EXISTS idx_view ON access_logs(view);
     CREATE INDEX IF NOT EXISTS idx_timestamp ON access_logs(timestamp);
     CREATE INDEX IF NOT EXISTS idx_block_reason ON access_logs(block_reason);
   `);
+  
+  // Migration: Thêm cột headers nếu chưa tồn tại
+  try {
+    dbInstance.exec(`ALTER TABLE access_logs ADD COLUMN headers TEXT`);
+  } catch (error: any) {
+    // Cột đã tồn tại, bỏ qua
+    if (!error.message?.includes('duplicate column name')) {
+      console.warn('Error adding headers column:', error);
+    }
+  }
 
   return dbInstance;
 }
@@ -48,8 +63,8 @@ export class SQLiteAdapter implements DatabaseAdapter {
     try {
       const db = getDatabase();
       const stmt = db.prepare(`
-        INSERT INTO access_logs (ip, view, block_reason, organization, asn, user_agent)
-        VALUES (?, ?, ?, ?, ?, ?)
+        INSERT INTO access_logs (ip, view, block_reason, organization, asn, user_agent, headers)
+        VALUES (?, ?, ?, ?, ?, ?, ?)
       `);
       
       stmt.run(
@@ -58,7 +73,8 @@ export class SQLiteAdapter implements DatabaseAdapter {
         log.block_reason || null,
         log.organization || null,
         log.asn || null,
-        log.user_agent || null
+        log.user_agent || null,
+        log.headers || null
       );
     } catch (error) {
       console.error('Error saving access log:', error);

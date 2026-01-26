@@ -11,6 +11,7 @@ export interface AccessLog {
   asn?: number | null;
   timestamp?: string;
   user_agent?: string | null;
+  headers?: string | null; // JSON string của headers
 }
 
 export interface LogQueryParams {

@@ -134,7 +134,8 @@ export class PostgresAdapter implements DatabaseAdapter {
           organization TEXT,
           asn INTEGER,
           timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-          user_agent TEXT
+          user_agent TEXT,
+          headers TEXT
         );
 
         CREATE INDEX IF NOT EXISTS idx_ip ON access_logs(ip);
@@ -142,6 +143,14 @@ export class PostgresAdapter implements DatabaseAdapter {
         CREATE INDEX IF NOT EXISTS idx_timestamp ON access_logs(timestamp);
         CREATE INDEX IF NOT EXISTS idx_block_reason ON access_logs(block_reason);
       `);
+      
+      // Migration: Thêm cột headers nếu chưa tồn tại
+      try {
+        await pool.query(`ALTER TABLE access_logs ADD COLUMN IF NOT EXISTS headers TEXT`);
+      } catch (error) {
+        // Cột đã tồn tại hoặc lỗi khác, bỏ qua
+        console.warn('Error adding headers column (may already exist):', error);
+      }
     });
   }
 
@@ -151,8 +160,8 @@ export class PostgresAdapter implements DatabaseAdapter {
     // Retry với exponential backoff
     await retryWithBackoff(async () => {
       await pool.query(
-        `INSERT INTO access_logs (ip, view, block_reason, organization, asn, user_agent)
-         VALUES ($1, $2, $3, $4, $5, $6)`,
+        `INSERT INTO access_logs (ip, view, block_reason, organization, asn, user_agent, headers)
+         VALUES ($1, $2, $3, $4, $5, $6, $7)`,
         [
           log.ip,
           log.view,
@@ -160,6 +169,7 @@ export class PostgresAdapter implements DatabaseAdapter {
           log.organization || null,
           log.asn || null,
           log.user_agent || null,
+          log.headers || null,
         ]
       );
     }, 2, 200); // 2 retries với delay ban đầu 200ms

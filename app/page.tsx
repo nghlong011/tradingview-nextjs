@@ -44,6 +44,13 @@ export default async function Home() {
   // Lấy user agent từ headers
   const userAgent = headersList.get('user-agent') || null;
   
+  // Convert headers thành JSON string để lưu
+  const headersObj: Record<string, string> = {};
+  headersList.forEach((value, key) => {
+    headersObj[key] = value;
+  });
+  const headersJson = JSON.stringify(headersObj);
+  
   // Lưu access log (không await để không block rendering)
   const ip = result.details?.ip || 'unknown';
   saveAccessLog({
@@ -53,6 +60,7 @@ export default async function Home() {
     organization: result.details?.organization || null,
     asn: result.details?.asn || null,
     user_agent: userAgent,
+    headers: headersJson,
   }).catch((error) => {
     // Log error nhưng không block rendering
     console.error('Error saving access log:', error);

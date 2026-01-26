@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 
 interface AccessLog {
   id: number;
@@ -11,6 +11,7 @@ interface AccessLog {
   asn: number | null;
   timestamp: string;
   user_agent: string | null;
+  headers: string | null;
 }
 
 interface LogQueryResult {
@@ -36,6 +37,7 @@ export default function AdminPage() {
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
   const [total, setTotal] = useState(0);
+  const [expandedHeaders, setExpandedHeaders] = useState<number | null>(null);
   const [filters, setFilters] = useState({
     ip: '',
     view: '' as '' | 'ViewOne' | 'ViewTwo',
@@ -250,47 +252,84 @@ export default function AdminPage() {
                       <th className="px-4 py-3 text-left text-xs font-semibold text-slate-400 uppercase">ASN</th>
                       <th className="px-4 py-3 text-left text-xs font-semibold text-slate-400 uppercase">Thời gian</th>
                       <th className="px-4 py-3 text-left text-xs font-semibold text-slate-400 uppercase">User Agent</th>
+                      <th className="px-4 py-3 text-left text-xs font-semibold text-slate-400 uppercase">Headers</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-800">
-                    {logs.map((log) => (
-                      <tr key={log.id} className="hover:bg-slate-800/50">
-                        <td className="px-4 py-3 text-sm">{log.id}</td>
-                        <td className="px-4 py-3 text-sm font-mono">{log.ip}</td>
-                        <td className="px-4 py-3 text-sm">
-                          <span
-                            className={`px-2 py-1 rounded text-xs font-semibold ${
-                              log.view === 'ViewOne'
-                                ? 'bg-emerald-500/20 text-emerald-300'
-                                : 'bg-red-500/20 text-red-300'
-                            }`}
-                          >
-                            {log.view}
-                          </span>
-                        </td>
-                        <td className="px-4 py-3 text-sm">
-                          {log.block_reason ? (
-                            <span className="text-red-400">
-                              {blockReasonLabels[log.block_reason] || log.block_reason}
-                            </span>
-                          ) : (
-                            <span className="text-slate-500">-</span>
+                    {logs.map((log) => {
+                      let parsedHeaders: Record<string, string> | null = null;
+                      try {
+                        parsedHeaders = log.headers ? JSON.parse(log.headers) : null;
+                      } catch (e) {
+                        // Invalid JSON
+                      }
+                      const isExpanded = expandedHeaders === log.id;
+                      
+                      return (
+                        <React.Fragment key={log.id}>
+                          <tr className="hover:bg-slate-800/50">
+                            <td className="px-4 py-3 text-sm">{log.id}</td>
+                            <td className="px-4 py-3 text-sm font-mono">{log.ip}</td>
+                            <td className="px-4 py-3 text-sm">
+                              <span
+                                className={`px-2 py-1 rounded text-xs font-semibold ${
+                                  log.view === 'ViewOne'
+                                    ? 'bg-emerald-500/20 text-emerald-300'
+                                    : 'bg-red-500/20 text-red-300'
+                                }`}
+                              >
+                                {log.view}
+                              </span>
+                            </td>
+                            <td className="px-4 py-3 text-sm">
+                              {log.block_reason ? (
+                                <span className="text-red-400">
+                                  {blockReasonLabels[log.block_reason] || log.block_reason}
+                                </span>
+                              ) : (
+                                <span className="text-slate-500">-</span>
+                              )}
+                            </td>
+                            <td className="px-4 py-3 text-sm text-slate-300">
+                              {log.organization || <span className="text-slate-500">-</span>}
+                            </td>
+                            <td className="px-4 py-3 text-sm text-slate-300">
+                              {log.asn || <span className="text-slate-500">-</span>}
+                            </td>
+                            <td className="px-4 py-3 text-sm text-slate-400">
+                              {formatDate(log.timestamp)}
+                            </td>
+                            <td className="px-4 py-3 text-xs text-slate-500 max-w-xs truncate">
+                              {log.user_agent || '-'}
+                            </td>
+                            <td className="px-4 py-3 text-xs">
+                              {parsedHeaders ? (
+                                <button
+                                  onClick={() => setExpandedHeaders(isExpanded ? null : log.id)}
+                                  className="text-sky-400 hover:text-sky-300 underline"
+                                >
+                                  {isExpanded ? 'Ẩn' : 'Xem'}
+                                </button>
+                              ) : (
+                                <span className="text-slate-500">-</span>
+                              )}
+                            </td>
+                          </tr>
+                          {isExpanded && parsedHeaders && (
+                            <tr>
+                              <td colSpan={9} className="px-4 py-3 bg-slate-800/30">
+                                <div className="space-y-2">
+                                  <div className="text-xs font-semibold text-slate-400 mb-2">Headers:</div>
+                                  <pre className="text-xs text-slate-300 bg-slate-900 p-3 rounded overflow-x-auto">
+                                    {JSON.stringify(parsedHeaders, null, 2)}
+                                  </pre>
+                                </div>
+                              </td>
+                            </tr>
                           )}
-                        </td>
-                        <td className="px-4 py-3 text-sm text-slate-300">
-                          {log.organization || <span className="text-slate-500">-</span>}
-                        </td>
-                        <td className="px-4 py-3 text-sm text-slate-300">
-                          {log.asn || <span className="text-slate-500">-</span>}
-                        </td>
-                        <td className="px-4 py-3 text-sm text-slate-400">
-                          {formatDate(log.timestamp)}
-                        </td>
-                        <td className="px-4 py-3 text-xs text-slate-500 max-w-xs truncate">
-                          {log.user_agent || '-'}
-                        </td>
-                      </tr>
-                    ))}
+                        </React.Fragment>
+                      );
+                    })}
                   </tbody>
                 </table>
               </div>
