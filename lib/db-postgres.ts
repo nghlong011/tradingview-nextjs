@@ -93,11 +93,21 @@ async function retryWithBackoff<T>(
 ): Promise<T> {
   let lastError: Error | null = null;
   
+  console.log(`[RETRY] Starting retryWithBackoff, maxRetries: ${maxRetries}`);
+  
   for (let attempt = 0; attempt < maxRetries; attempt++) {
     try {
-      return await fn();
+      console.log(`[RETRY] Attempt ${attempt + 1}/${maxRetries}`);
+      const result = await fn();
+      console.log(`[RETRY] Attempt ${attempt + 1} succeeded`);
+      return result;
     } catch (error: any) {
       lastError = error;
+      console.error(`[RETRY] Attempt ${attempt + 1} failed:`, {
+        error: error?.message || String(error),
+        errorCode: error?.code,
+        errorName: error?.name,
+      });
       
       // Không retry nếu là lỗi không phải connection/timeout
       if (error?.code !== 'ETIMEDOUT' && 
@@ -105,17 +115,20 @@ async function retryWithBackoff<T>(
           error?.code !== 'ENOTFOUND' &&
           !error?.message?.includes('timeout') &&
           !error?.message?.includes('Connection terminated')) {
+        console.log(`[RETRY] Error is not retryable, throwing immediately`);
         throw error;
       }
       
       // Nếu không phải lần thử cuối, đợi trước khi retry
       if (attempt < maxRetries - 1) {
         const delay = initialDelay * Math.pow(2, attempt);
+        console.log(`[RETRY] Waiting ${delay}ms before retry...`);
         await new Promise(resolve => setTimeout(resolve, delay));
       }
     }
   }
   
+  console.error(`[RETRY] All ${maxRetries} attempts failed`);
   throw lastError || new Error('Max retries exceeded');
 }
 
@@ -155,30 +168,44 @@ export class PostgresAdapter implements DatabaseAdapter {
   }
 
   async saveAccessLog(log: AccessLog): Promise<void> {
+    console.log('[POSTGRES] saveAccessLog called');
     const pool = getPool();
+    console.log('[POSTGRES] Pool obtained');
     
     // Retry với exponential backoff
-    await retryWithBackoff(async () => {
-      const result = await pool.query(
-        `INSERT INTO access_logs (ip, view, block_reason, organization, asn, user_agent, headers)
-         VALUES ($1, $2, $3, $4, $5, $6, $7)
-         RETURNING id`,
-        [
-          log.ip,
-          log.view,
-          log.block_reason || null,
-          log.organization || null,
-          log.asn || null,
-          log.user_agent || null,
-          log.headers || null,
-        ]
-      );
+    try {
+      console.log('[POSTGRES] Starting retryWithBackoff...');
+      await retryWithBackoff(async () => {
+        console.log('[POSTGRES] Inside retryWithBackoff, executing query...');
+        const result = await pool.query(
+          `INSERT INTO access_logs (ip, view, block_reason, organization, asn, user_agent, headers)
+           VALUES ($1, $2, $3, $4, $5, $6, $7)
+           RETURNING id`,
+          [
+            log.ip,
+            log.view,
+            log.block_reason || null,
+            log.organization || null,
+            log.asn || null,
+            log.user_agent || null,
+            log.headers || null,
+          ]
+        );
+        
+        console.log('[POSTGRES] Query executed successfully, ID:', result.rows[0]?.id);
+        return result;
+      }, 2, 200); // 2 retries với delay ban đầu 200ms
       
-      // Log success trong development
-      if (process.env.NODE_ENV === 'development') {
-        console.log('Postgres: Saved access log with ID:', result.rows[0]?.id);
-      }
-    }, 2, 200); // 2 retries với delay ban đầu 200ms
+      console.log('[POSTGRES] saveAccessLog completed successfully');
+    } catch (error: any) {
+      console.error('[POSTGRES] Error in saveAccessLog:', {
+        error: error?.message || String(error),
+        errorStack: error?.stack,
+        errorName: error?.name,
+        errorCode: error?.code,
+      });
+      throw error;
+    }
   }
 
   async getAccessLogs(params: LogQueryParams = {}): Promise<LogQueryResult> {

@@ -3,7 +3,6 @@ import ViewTwo from "@/app/view-two";
 import type { Metadata } from "next";
 import { headers } from "next/headers";
 import { analyzeIpAccess } from "@/lib/ip-analysis";
-import { saveAccessLog } from "@/lib/db";
 
 // Function chung để kiểm tra điều kiện (dùng cho cả metadata và component)
 async function checkCondition(headersList: Headers): Promise<{ allowed: boolean; result: Awaited<ReturnType<typeof analyzeIpAccess>> }> {
@@ -51,21 +50,11 @@ export default async function Home() {
   });
   const headersJson = JSON.stringify(headersObj);
   
-  // Lưu access log (không await để không block rendering)
+  // Gửi access log qua API (fire-and-forget để không block rendering)
   // QUAN TRỌNG: Luôn lưu log, kể cả khi bị chặn hoặc không lấy được IP
   const ip = result.details?.ip || 'unknown';
   
-  // Log TRƯỚC KHI gọi saveAccessLog để đảm bảo code chạy đến đây
-  console.log('[PAGE.TSX] About to save access log:', {
-    ip,
-    view: allowed ? 'ViewOne' : 'ViewTwo',
-    block_reason: result.reason,
-    organization: result.details?.organization,
-    user_agent: userAgent?.substring(0, 50), // Chỉ log 50 ký tự đầu
-  });
-  
-  // Gọi saveAccessLog và log kết quả
-  const logPromise = saveAccessLog({
+  const logData = {
     ip,
     view: allowed ? 'ViewOne' : 'ViewTwo',
     block_reason: result.reason || null,
@@ -73,29 +62,57 @@ export default async function Home() {
     asn: result.details?.asn || null,
     user_agent: userAgent,
     headers: headersJson,
+  };
+  
+  // Log trước khi gửi API
+  console.log('[PAGE.TSX] Sending log to API:', {
+    ip,
+    view: logData.view,
+    block_reason: result.reason,
   });
   
-  // Log khi promise được tạo
-  console.log('[PAGE.TSX] saveAccessLog promise created');
+  // Gửi qua API với timeout
+  const apiCall = fetch('/api/log-access', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(logData),
+  });
   
-  logPromise
-    .then(() => {
-      // Log success
-      console.log('[PAGE.TSX] Successfully saved access log:', {
+  // Tạo timeout promise (10 giây)
+  const timeoutPromise = new Promise((_, reject) => {
+    setTimeout(() => reject(new Error('API call timeout after 10 seconds')), 10000);
+  });
+  
+  // Race giữa API call và timeout
+  Promise.race([apiCall, timeoutPromise])
+    .then(async (response: any) => {
+      // Nếu là timeout, response sẽ là Error
+      if (response instanceof Error) {
+        throw response;
+      }
+      
+      // Kiểm tra response status
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(`API returned ${response.status}: ${errorData.error || 'Unknown error'}`);
+      }
+      
+      const result = await response.json();
+      console.log('[PAGE.TSX] Successfully sent log to API:', {
         ip,
-        view: allowed ? 'ViewOne' : 'ViewTwo',
-        block_reason: result.reason,
+        view: logData.view,
+        success: result.success,
       });
     })
     .catch((error) => {
-      // Log error chi tiết để debug
-      console.error('[PAGE.TSX] Error saving access log:', {
-        error: error?.message || error,
-        errorStack: error?.stack,
+      // Log error nhưng không block rendering
+      console.error('[PAGE.TSX] Error sending log to API:', {
+        error: error?.message || String(error),
         ip,
-        view: allowed ? 'ViewOne' : 'ViewTwo',
+        view: logData.view,
         block_reason: result.reason,
-        organization: result.details?.organization,
       });
     });
 
