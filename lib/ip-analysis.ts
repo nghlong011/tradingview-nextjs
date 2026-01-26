@@ -193,6 +193,19 @@ export function isBusinessIp(organization: string | null): boolean {
 }
 
 /**
+ * Kết quả phân tích IP access
+ */
+export interface IpAccessResult {
+  allowed: boolean;
+  reason?: string;
+  details?: {
+    ip: string;
+    organization?: string | null;
+    asn?: number | null;
+  };
+}
+
+/**
  * Function chính để phân tích IP và quyết định có cho phép truy cập không
  * 
  * Flow:
@@ -204,29 +217,38 @@ export function isBusinessIp(organization: string | null): boolean {
  * 6. Nếu không phát hiện cả hai → return true
  * 
  * @param headers - Next.js headers object
- * @returns Promise<boolean> - true nếu cho phép truy cập, false nếu không
+ * @returns Promise<IpAccessResult> - Kết quả phân tích với chi tiết
  */
-export async function analyzeIpAccess(headers: Headers): Promise<boolean> {
+export async function analyzeIpAccess(headers: Headers): Promise<IpAccessResult> {
   try {
     // 1. Lấy IP từ request headers
     const ip = getClientIp(headers);
     
     if (!ip) {
       console.warn('Could not determine client IP address');
-      return false; // Fail-safe: không có IP → không cho phép
+      return {
+        allowed: false,
+        reason: 'NO_IP',
+        details: { ip: 'unknown' },
+      };
     }
 
     // 2. Xử lý localhost - trong development có thể cho phép, production thì không
     if (isLocalhost(ip)) {
-      // Trong development mode, có thể cho phép localhost để test
-      // Trong production, nên block localhost
       const isDevelopment = process.env.NODE_ENV === 'development';
       if (isDevelopment) {
         console.log(`Development mode: Allowing localhost IP ${ip}`);
-        return true;
+        return {
+          allowed: true,
+          details: { ip },
+        };
       } else {
         console.warn(`Blocked: Localhost IP detected in production: ${ip}`);
-        return false;
+        return {
+          allowed: false,
+          reason: 'LOCALHOST_PRODUCTION',
+          details: { ip },
+        };
       }
     }
 
@@ -235,27 +257,62 @@ export async function analyzeIpAccess(headers: Headers): Promise<boolean> {
     
     if (!asnInfo.organization) {
       console.warn(`Could not determine ASN organization for IP: ${ip}`);
-      return false; // Fail-safe: không có organization → không cho phép
+      return {
+        allowed: false,
+        reason: 'NO_ASN_ORGANIZATION',
+        details: {
+          ip,
+          organization: null,
+          asn: asnInfo.asn,
+        },
+      };
     }
 
     // 4. Kiểm tra proxy/VPN
     if (isProxyOrVpn(asnInfo.organization)) {
       console.log(`Blocked: Proxy/VPN detected for IP ${ip}, Organization: ${asnInfo.organization}`);
-      return false;
+      return {
+        allowed: false,
+        reason: 'PROXY_VPN_DETECTED',
+        details: {
+          ip,
+          organization: asnInfo.organization,
+          asn: asnInfo.asn,
+        },
+      };
     }
 
     // 5. Kiểm tra IP doanh nghiệp
     if (isBusinessIp(asnInfo.organization)) {
       console.log(`Blocked: Business IP detected for IP ${ip}, Organization: ${asnInfo.organization}`);
-      return false;
+      return {
+        allowed: false,
+        reason: 'BUSINESS_IP_DETECTED',
+        details: {
+          ip,
+          organization: asnInfo.organization,
+          asn: asnInfo.asn,
+        },
+      };
     }
 
     // 6. Không phát hiện proxy/VPN hoặc doanh nghiệp → cho phép
     console.log(`Allowed: IP ${ip}, Organization: ${asnInfo.organization}`);
-    return true;
+    return {
+      allowed: true,
+      details: {
+        ip,
+        organization: asnInfo.organization,
+        asn: asnInfo.asn,
+      },
+    };
 
   } catch (error) {
     console.error('Error in analyzeIpAccess:', error);
-    return false; // Fail-safe: có lỗi → không cho phép
+    return {
+      allowed: false,
+      reason: 'ERROR',
+      details: { ip: 'unknown' },
+    };
   }
 }
