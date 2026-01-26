@@ -169,11 +169,86 @@ export function isProxyOrVpn(organization: string | null): boolean {
 }
 
 /**
+ * Kiểm tra xem organization có phải là ISP (nhà cung cấp mạng cá nhân) không
+ * ISP thường cung cấp dịch vụ internet cho người dùng cá nhân
+ */
+export function isResidentialISP(organization: string | null): boolean {
+  if (!organization) {
+    return false;
+  }
+
+  const orgLower = organization.toLowerCase();
+  
+  // Whitelist các ISP phổ biến (có thể mở rộng)
+  const ispKeywords = [
+    'telecom',
+    'telecommunications',
+    'internet service',
+    'broadband',
+    'fiber',
+    'cable',
+    'dsl',
+    'isp',
+    'internet provider',
+    'network provider',
+  ];
+  
+  // Whitelist các ISP cụ thể (Việt Nam và quốc tế)
+  const ispNames = [
+    'viettel',
+    'fpt telecom',
+    'vnpt',
+    'cmc telecom',
+    'vietnamobile',
+    'mobifone',
+    'vinaphone',
+    'at&t',
+    'verizon',
+    'comcast',
+    'time warner',
+    'charter',
+    'cox',
+    'centurylink',
+    'frontier',
+    't-mobile',
+    'sprint',
+    'orange',
+    'vodafone',
+    'bt',
+    'sky',
+    'talktalk',
+  ];
+  
+  // Kiểm tra keywords ISP
+  const hasIspKeyword = ispKeywords.some(keyword => orgLower.includes(keyword));
+  
+  // Kiểm tra tên ISP cụ thể
+  const hasIspName = ispNames.some(name => orgLower.includes(name));
+  
+  // Nếu có keyword ISP hoặc tên ISP, nhưng KHÔNG có business keywords → là ISP cá nhân
+  if (hasIspKeyword || hasIspName) {
+    // Kiểm tra xem có phải là business ISP không (như "Business Internet Service")
+    const businessIspKeywords = ['business', 'enterprise', 'corporate', 'commercial'];
+    const isBusinessIsp = businessIspKeywords.some(keyword => orgLower.includes(keyword));
+    
+    // Nếu không phải business ISP → là residential ISP
+    return !isBusinessIsp;
+  }
+  
+  return false;
+}
+
+/**
  * Kiểm tra xem organization có phải là IP doanh nghiệp/công ty không
- * Dựa vào keywords trong organization name
+ * Loại trừ các ISP cá nhân (residential ISP)
  */
 export function isBusinessIp(organization: string | null): boolean {
   if (!organization) {
+    return false;
+  }
+
+  // Nếu là residential ISP → không phải business IP
+  if (isResidentialISP(organization)) {
     return false;
   }
 
