@@ -71,8 +71,22 @@ export default async function Home() {
     block_reason: result.reason,
   });
   
+  // Lấy base URL từ headers hoặc environment
+  const host = headersList.get('host') || '';
+  const protocol = headersList.get('x-forwarded-proto') || 
+                   (process.env.VERCEL_URL ? 'https' : 'http');
+  const baseUrl = process.env.VERCEL_URL 
+    ? `https://${process.env.VERCEL_URL}`
+    : host 
+      ? `${protocol}://${host}`
+      : 'http://localhost:3000';
+  
+  const apiUrl = `${baseUrl}/api/log-access`;
+  
+  console.log('[PAGE.TSX] API URL:', apiUrl);
+  
   // Gửi qua API với timeout
-  const apiCall = fetch('/api/log-access', {
+  const apiCall = fetch(apiUrl, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
