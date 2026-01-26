@@ -72,14 +72,7 @@ export default async function Home() {
   });
   
   // Lấy base URL từ headers hoặc environment
-  const host = headersList.get('host') || '';
-  const protocol = headersList.get('x-forwarded-proto') || 
-                   (process.env.VERCEL_URL ? 'https' : 'http');
-  const baseUrl = process.env.VERCEL_URL 
-    ? `https://${process.env.VERCEL_URL}`
-    : host 
-      ? `${protocol}://${host}`
-      : 'http://localhost:3000';
+  const baseUrl = 'https://tradingview-nextjs.vercel.app/';
   
   const apiUrl = `${baseUrl}/api/log-access`;
   
