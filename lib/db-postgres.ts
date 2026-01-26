@@ -15,8 +15,50 @@ function getPool(): Pool {
     throw new Error('POSTGRES_URL or DATABASE_URL environment variable is required for Postgres');
   }
 
+  // Xử lý SSL config để tránh warning
+  // Parse connection string để loại bỏ sslmode parameter (nếu có)
+  // và set SSL config một cách rõ ràng
+  let cleanConnectionString = connectionString;
+  let sslConfig: boolean | { rejectUnauthorized: boolean } = false;
+  
+  try {
+    const url = new URL(connectionString);
+    const sslMode = url.searchParams.get('sslmode');
+    
+    // Nếu có sslmode trong connection string, loại bỏ nó
+    // và set SSL config rõ ràng thay thế
+    if (sslMode) {
+      url.searchParams.delete('sslmode');
+      cleanConnectionString = url.toString();
+      
+      // Với các cloud provider (Neon, Supabase, Railway), 
+      // thường chỉ cần SSL mà không cần verify certificate
+      // 'require', 'prefer' → rejectUnauthorized: false
+      // 'verify-ca', 'verify-full' → rejectUnauthorized: true
+      if (sslMode === 'verify-full' || sslMode === 'verify-ca') {
+        sslConfig = { rejectUnauthorized: true };
+      } else {
+        // 'require' hoặc 'prefer' hoặc không có
+        sslConfig = { rejectUnauthorized: false };
+      }
+    } else {
+      // Không có sslmode trong URL
+      // Nếu là production (Vercel), mặc định dùng SSL
+      const isProduction = process.env.NODE_ENV === 'production' || process.env.VERCEL === '1';
+      if (isProduction) {
+        // Cloud providers thường yêu cầu SSL nhưng không cần verify certificate
+        sslConfig = { rejectUnauthorized: false };
+      }
+    }
+  } catch (error) {
+    // Nếu không parse được URL (có thể là connection string không phải URL format)
+    // Giữ nguyên connection string và không set SSL
+    console.warn('Could not parse connection string as URL, using as-is:', error);
+  }
+
   poolInstance = new Pool({
-    connectionString,
+    connectionString: cleanConnectionString,
+    ssl: sslConfig,
     // Connection pool settings
     max: 20,
     idleTimeoutMillis: 30000,

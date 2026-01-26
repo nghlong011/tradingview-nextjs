@@ -112,6 +112,14 @@ Các index cũng được tạo tự động:
 - Bảng sẽ được tạo tự động khi có request đầu tiên
 - Nếu không, có thể chạy migration thủ công (xem file `lib/db-postgres.ts`)
 
+### Warning về SSL mode
+Nếu bạn thấy warning về SSL modes ('prefer', 'require', 'verify-ca'), đây là warning từ thư viện `pg`. 
+
+Code đã được cấu hình để:
+- Tự động loại bỏ `sslmode` parameter từ connection string
+- Set SSL config một cách rõ ràng với `rejectUnauthorized: false` (phù hợp với Neon, Supabase, Railway)
+- Warning này sẽ không ảnh hưởng đến functionality, nhưng đã được fix để tránh warning trong tương lai
+
 ## Local Development
 
 Khi chạy local (không có `POSTGRES_URL`), project sẽ tự động dùng SQLite:
