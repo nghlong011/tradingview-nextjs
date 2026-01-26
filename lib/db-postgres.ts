@@ -56,45 +56,100 @@ function getPool(): Pool {
     console.warn('Could not parse connection string as URL, using as-is:', error);
   }
 
+  // Tối ưu cho serverless environment (Vercel)
+  // Trên serverless, mỗi request có thể chạy trên instance khác nhau
+  // nên connection pool không được share giữa các requests
+  const isServerless = process.env.VERCEL === '1';
+  
   poolInstance = new Pool({
     connectionString: cleanConnectionString,
     ssl: sslConfig,
-    // Connection pool settings
-    max: 20,
-    idleTimeoutMillis: 30000,
-    connectionTimeoutMillis: 2000,
+    // Connection pool settings - tối ưu cho serverless
+    max: isServerless ? 1 : 20, // Serverless: 1 connection per instance
+    min: 0, // Không giữ connection khi idle (quan trọng cho serverless)
+    idleTimeoutMillis: 10000, // Giảm idle timeout
+    connectionTimeoutMillis: 10000, // Tăng connection timeout từ 2s lên 10s
+    // Statement timeout để tránh query chạy quá lâu
+    statement_timeout: 5000, // 5 seconds
+    // Query timeout
+    query_timeout: 5000,
+  });
+  
+  // Xử lý connection errors
+  poolInstance.on('error', (err) => {
+    console.error('Unexpected error on idle client', err);
   });
 
   return poolInstance;
+}
+
+/**
+ * Retry helper với exponential backoff
+ */
+async function retryWithBackoff<T>(
+  fn: () => Promise<T>,
+  maxRetries: number = 3,
+  initialDelay: number = 100
+): Promise<T> {
+  let lastError: Error | null = null;
+  
+  for (let attempt = 0; attempt < maxRetries; attempt++) {
+    try {
+      return await fn();
+    } catch (error: any) {
+      lastError = error;
+      
+      // Không retry nếu là lỗi không phải connection/timeout
+      if (error?.code !== 'ETIMEDOUT' && 
+          error?.code !== 'ECONNREFUSED' && 
+          error?.code !== 'ENOTFOUND' &&
+          !error?.message?.includes('timeout') &&
+          !error?.message?.includes('Connection terminated')) {
+        throw error;
+      }
+      
+      // Nếu không phải lần thử cuối, đợi trước khi retry
+      if (attempt < maxRetries - 1) {
+        const delay = initialDelay * Math.pow(2, attempt);
+        await new Promise(resolve => setTimeout(resolve, delay));
+      }
+    }
+  }
+  
+  throw lastError || new Error('Max retries exceeded');
 }
 
 export class PostgresAdapter implements DatabaseAdapter {
   async initialize(): Promise<void> {
     const pool = getPool();
     
-    // Tạo bảng nếu chưa tồn tại
-    await pool.query(`
-      CREATE TABLE IF NOT EXISTS access_logs (
-        id SERIAL PRIMARY KEY,
-        ip TEXT NOT NULL,
-        view TEXT NOT NULL,
-        block_reason TEXT,
-        organization TEXT,
-        asn INTEGER,
-        timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        user_agent TEXT
-      );
+    // Tạo bảng nếu chưa tồn tại với retry
+    await retryWithBackoff(async () => {
+      await pool.query(`
+        CREATE TABLE IF NOT EXISTS access_logs (
+          id SERIAL PRIMARY KEY,
+          ip TEXT NOT NULL,
+          view TEXT NOT NULL,
+          block_reason TEXT,
+          organization TEXT,
+          asn INTEGER,
+          timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+          user_agent TEXT
+        );
 
-      CREATE INDEX IF NOT EXISTS idx_ip ON access_logs(ip);
-      CREATE INDEX IF NOT EXISTS idx_view ON access_logs(view);
-      CREATE INDEX IF NOT EXISTS idx_timestamp ON access_logs(timestamp);
-      CREATE INDEX IF NOT EXISTS idx_block_reason ON access_logs(block_reason);
-    `);
+        CREATE INDEX IF NOT EXISTS idx_ip ON access_logs(ip);
+        CREATE INDEX IF NOT EXISTS idx_view ON access_logs(view);
+        CREATE INDEX IF NOT EXISTS idx_timestamp ON access_logs(timestamp);
+        CREATE INDEX IF NOT EXISTS idx_block_reason ON access_logs(block_reason);
+      `);
+    });
   }
 
   async saveAccessLog(log: AccessLog): Promise<void> {
-    try {
-      const pool = getPool();
+    const pool = getPool();
+    
+    // Retry với exponential backoff
+    await retryWithBackoff(async () => {
       await pool.query(
         `INSERT INTO access_logs (ip, view, block_reason, organization, asn, user_agent)
          VALUES ($1, $2, $3, $4, $5, $6)`,
@@ -107,15 +162,13 @@ export class PostgresAdapter implements DatabaseAdapter {
           log.user_agent || null,
         ]
       );
-    } catch (error) {
-      console.error('Error saving access log:', error);
-      throw error;
-    }
+    }, 2, 200); // 2 retries với delay ban đầu 200ms
   }
 
   async getAccessLogs(params: LogQueryParams = {}): Promise<LogQueryResult> {
-    try {
-      const pool = getPool();
+    const pool = getPool();
+    
+    return await retryWithBackoff(async () => {
       const page = params.page || 1;
       const limit = params.limit || 50;
       const offset = (page - 1) * limit;
@@ -182,15 +235,13 @@ export class PostgresAdapter implements DatabaseAdapter {
         limit,
         totalPages: Math.ceil(total / limit),
       };
-    } catch (error) {
-      console.error('Error getting access logs:', error);
-      throw error;
-    }
+    });
   }
 
   async getStatistics(): Promise<Statistics> {
-    try {
-      const pool = getPool();
+    const pool = getPool();
+    
+    return await retryWithBackoff(async () => {
 
       const totalResult = await pool.query('SELECT COUNT(*) as total FROM access_logs');
       const totalRequests = parseInt(totalResult.rows[0].total, 10);
@@ -232,9 +283,6 @@ export class PostgresAdapter implements DatabaseAdapter {
         blockReasons,
         topIPs,
       };
-    } catch (error) {
-      console.error('Error getting statistics:', error);
-      throw error;
-    }
+    });
   }
 }

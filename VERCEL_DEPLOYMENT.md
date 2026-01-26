@@ -120,6 +120,24 @@ Code đã được cấu hình để:
 - Set SSL config một cách rõ ràng với `rejectUnauthorized: false` (phù hợp với Neon, Supabase, Railway)
 - Warning này sẽ không ảnh hưởng đến functionality, nhưng đã được fix để tránh warning trong tương lai
 
+### Lỗi: Connection timeout
+Nếu bạn gặp lỗi "Connection terminated due to connection timeout":
+
+**Đã được fix với:**
+1. **Tăng connection timeout**: Từ 2s lên 10s
+2. **Retry logic**: Tự động retry với exponential backoff khi gặp timeout
+3. **Tối ưu connection pool cho serverless**:
+   - `max: 1` connection trên serverless (Vercel)
+   - `min: 0` - không giữ connection khi idle
+   - `idleTimeoutMillis: 10000` - giảm idle timeout
+   - `statement_timeout: 5000` - timeout cho queries
+
+**Nếu vẫn gặp lỗi:**
+- Kiểm tra database có cho phép connection từ Vercel IP không
+- Kiểm tra firewall settings của database provider
+- Thử tăng `connectionTimeoutMillis` trong `lib/db-postgres.ts` nếu cần
+- Xem logs trên Vercel để biết thêm chi tiết
+
 ## Local Development
 
 Khi chạy local (không có `POSTGRES_URL`), project sẽ tự động dùng SQLite:
