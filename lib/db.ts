@@ -69,8 +69,26 @@ export async function saveAccessLog(log: AccessLog): Promise<void> {
     if (result instanceof Promise) {
       await result;
     }
+    
+    // Log success (chỉ trong development để debug)
+    if (process.env.NODE_ENV === 'development') {
+      console.log('Successfully saved access log:', {
+        ip: log.ip,
+        view: log.view,
+        block_reason: log.block_reason,
+      });
+    }
   } catch (error) {
-    console.error('Error saving access log:', error);
+    // Log chi tiết lỗi để debug
+    console.error('Error saving access log:', {
+      error,
+      log: {
+        ip: log.ip,
+        view: log.view,
+        block_reason: log.block_reason,
+        hasHeaders: !!log.headers,
+      },
+    });
     // Không throw để không block request
   }
 }

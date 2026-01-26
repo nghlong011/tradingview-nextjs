@@ -266,6 +266,8 @@ export async function analyzeIpAccess(headers: Headers): Promise<IpAccessResult>
     
     if (!ip) {
       console.warn('Could not determine client IP address');
+      // Vẫn trả về với ip: 'unknown' để có thể lưu log
+      // Không return sớm để có thể log request này
       return {
         allowed: false,
         reason: 'NO_IP',

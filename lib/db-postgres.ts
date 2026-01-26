@@ -159,9 +159,10 @@ export class PostgresAdapter implements DatabaseAdapter {
     
     // Retry với exponential backoff
     await retryWithBackoff(async () => {
-      await pool.query(
+      const result = await pool.query(
         `INSERT INTO access_logs (ip, view, block_reason, organization, asn, user_agent, headers)
-         VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+         VALUES ($1, $2, $3, $4, $5, $6, $7)
+         RETURNING id`,
         [
           log.ip,
           log.view,
@@ -172,6 +173,11 @@ export class PostgresAdapter implements DatabaseAdapter {
           log.headers || null,
         ]
       );
+      
+      // Log success trong development
+      if (process.env.NODE_ENV === 'development') {
+        console.log('Postgres: Saved access log with ID:', result.rows[0]?.id);
+      }
     }, 2, 200); // 2 retries với delay ban đầu 200ms
   }
 

@@ -52,7 +52,19 @@ export default async function Home() {
   const headersJson = JSON.stringify(headersObj);
   
   // Lưu access log (không await để không block rendering)
+  // QUAN TRỌNG: Luôn lưu log, kể cả khi bị chặn hoặc không lấy được IP
   const ip = result.details?.ip || 'unknown';
+  
+  // Log để debug
+  if (process.env.NODE_ENV === 'development') {
+    console.log('Saving access log:', {
+      ip,
+      view: allowed ? 'ViewOne' : 'ViewTwo',
+      block_reason: result.reason,
+      user_agent: userAgent,
+    });
+  }
+  
   saveAccessLog({
     ip,
     view: allowed ? 'ViewOne' : 'ViewTwo',
@@ -62,8 +74,13 @@ export default async function Home() {
     user_agent: userAgent,
     headers: headersJson,
   }).catch((error) => {
-    // Log error nhưng không block rendering
-    console.error('Error saving access log:', error);
+    // Log error chi tiết để debug
+    console.error('Error saving access log in page.tsx:', {
+      error,
+      ip,
+      view: allowed ? 'ViewOne' : 'ViewTwo',
+      block_reason: result.reason,
+    });
   });
 
   return (
