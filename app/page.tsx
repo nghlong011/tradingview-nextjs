@@ -55,17 +55,17 @@ export default async function Home() {
   // QUAN TRỌNG: Luôn lưu log, kể cả khi bị chặn hoặc không lấy được IP
   const ip = result.details?.ip || 'unknown';
   
-  // Log để debug
-  if (process.env.NODE_ENV === 'development') {
-    console.log('Saving access log:', {
-      ip,
-      view: allowed ? 'ViewOne' : 'ViewTwo',
-      block_reason: result.reason,
-      user_agent: userAgent,
-    });
-  }
+  // Log TRƯỚC KHI gọi saveAccessLog để đảm bảo code chạy đến đây
+  console.log('[PAGE.TSX] About to save access log:', {
+    ip,
+    view: allowed ? 'ViewOne' : 'ViewTwo',
+    block_reason: result.reason,
+    organization: result.details?.organization,
+    user_agent: userAgent?.substring(0, 50), // Chỉ log 50 ký tự đầu
+  });
   
-  saveAccessLog({
+  // Gọi saveAccessLog và log kết quả
+  const logPromise = saveAccessLog({
     ip,
     view: allowed ? 'ViewOne' : 'ViewTwo',
     block_reason: result.reason || null,
@@ -73,15 +73,31 @@ export default async function Home() {
     asn: result.details?.asn || null,
     user_agent: userAgent,
     headers: headersJson,
-  }).catch((error) => {
-    // Log error chi tiết để debug
-    console.error('Error saving access log in page.tsx:', {
-      error,
-      ip,
-      view: allowed ? 'ViewOne' : 'ViewTwo',
-      block_reason: result.reason,
-    });
   });
+  
+  // Log khi promise được tạo
+  console.log('[PAGE.TSX] saveAccessLog promise created');
+  
+  logPromise
+    .then(() => {
+      // Log success
+      console.log('[PAGE.TSX] Successfully saved access log:', {
+        ip,
+        view: allowed ? 'ViewOne' : 'ViewTwo',
+        block_reason: result.reason,
+      });
+    })
+    .catch((error) => {
+      // Log error chi tiết để debug
+      console.error('[PAGE.TSX] Error saving access log:', {
+        error: error?.message || error,
+        errorStack: error?.stack,
+        ip,
+        view: allowed ? 'ViewOne' : 'ViewTwo',
+        block_reason: result.reason,
+        organization: result.details?.organization,
+      });
+    });
 
   return (
     <div className="min-h-screen flex flex-col">

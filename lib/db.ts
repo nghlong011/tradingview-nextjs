@@ -60,36 +60,55 @@ async function ensureInitialized(): Promise<void> {
  * Lưu access log vào database
  */
 export async function saveAccessLog(log: AccessLog): Promise<void> {
+  console.log('[DB.TS] saveAccessLog called with:', {
+    ip: log.ip,
+    view: log.view,
+    block_reason: log.block_reason,
+    organization: log.organization,
+  });
+  
   try {
+    console.log('[DB.TS] Ensuring database initialized...');
     await ensureInitialized();
+    console.log('[DB.TS] Database initialized, getting adapter...');
+    
     const adapter = getAdapter();
+    console.log('[DB.TS] Adapter obtained, calling saveAccessLog...');
+    
     const result = adapter.saveAccessLog(log);
     
     // Nếu là Promise (Postgres), await nó
     if (result instanceof Promise) {
+      console.log('[DB.TS] Waiting for Postgres saveAccessLog promise...');
       await result;
+      console.log('[DB.TS] Postgres saveAccessLog completed');
+    } else {
+      console.log('[DB.TS] SQLite saveAccessLog completed (synchronous)');
     }
     
-    // Log success (chỉ trong development để debug)
-    if (process.env.NODE_ENV === 'development') {
-      console.log('Successfully saved access log:', {
-        ip: log.ip,
-        view: log.view,
-        block_reason: log.block_reason,
-      });
-    }
-  } catch (error) {
+    // Log success
+    console.log('[DB.TS] Successfully saved access log:', {
+      ip: log.ip,
+      view: log.view,
+      block_reason: log.block_reason,
+    });
+  } catch (error: unknown) {
     // Log chi tiết lỗi để debug
-    console.error('Error saving access log:', {
-      error,
+    const err = error as Error;
+    console.error('[DB.TS] Error saving access log:', {
+      error: err?.message || String(error),
+      errorStack: err?.stack,
+      errorName: err?.name,
       log: {
         ip: log.ip,
         view: log.view,
         block_reason: log.block_reason,
         hasHeaders: !!log.headers,
+        organization: log.organization,
       },
     });
-    // Không throw để không block request
+    // Throw lại để caller có thể catch
+    throw error;
   }
 }
 
