@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { saveAccessLog, AccessLog } from '@/lib/db';
+import { parseUserAgent } from '@/lib/ua-parser';
 
 export async function POST(request: NextRequest) {
   try {
@@ -12,6 +13,10 @@ export async function POST(request: NextRequest) {
       hasHeaders: !!body.headers,
     });
     
+    // Parse user-agent
+    const parsedUA = parseUserAgent(body.user_agent);
+    const parsedUAJson = parsedUA ? JSON.stringify(parsedUA) : null;
+    
     const log: AccessLog = {
       ip: body.ip,
       view: body.view,
@@ -19,6 +24,7 @@ export async function POST(request: NextRequest) {
       organization: body.organization || null,
       asn: body.asn || null,
       user_agent: body.user_agent || null,
+      user_agent_parsed: parsedUAJson,
       headers: body.headers || null,
     };
 

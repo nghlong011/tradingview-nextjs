@@ -148,6 +148,7 @@ export class PostgresAdapter implements DatabaseAdapter {
           asn INTEGER,
           timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
           user_agent TEXT,
+          user_agent_parsed TEXT,
           headers TEXT
         );
 
@@ -157,12 +158,19 @@ export class PostgresAdapter implements DatabaseAdapter {
         CREATE INDEX IF NOT EXISTS idx_block_reason ON access_logs(block_reason);
       `);
       
-      // Migration: Thêm cột headers nếu chưa tồn tại
+      // Migration: Thêm cột headers và user_agent_parsed nếu chưa tồn tại
       try {
         await pool.query(`ALTER TABLE access_logs ADD COLUMN IF NOT EXISTS headers TEXT`);
       } catch (error) {
         // Cột đã tồn tại hoặc lỗi khác, bỏ qua
         console.warn('Error adding headers column (may already exist):', error);
+      }
+      
+      try {
+        await pool.query(`ALTER TABLE access_logs ADD COLUMN IF NOT EXISTS user_agent_parsed TEXT`);
+      } catch (error) {
+        // Cột đã tồn tại hoặc lỗi khác, bỏ qua
+        console.warn('Error adding user_agent_parsed column (may already exist):', error);
       }
     });
   }
@@ -178,8 +186,8 @@ export class PostgresAdapter implements DatabaseAdapter {
       await retryWithBackoff(async () => {
         console.log('[POSTGRES] Inside retryWithBackoff, executing query...');
         const result = await pool.query(
-          `INSERT INTO access_logs (ip, view, block_reason, organization, asn, user_agent, headers)
-           VALUES ($1, $2, $3, $4, $5, $6, $7)
+          `INSERT INTO access_logs (ip, view, block_reason, organization, asn, user_agent, user_agent_parsed, headers)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
            RETURNING id`,
           [
             log.ip,
@@ -188,6 +196,7 @@ export class PostgresAdapter implements DatabaseAdapter {
             log.organization || null,
             log.asn || null,
             log.user_agent || null,
+            log.user_agent_parsed || null,
             log.headers || null,
           ]
         );

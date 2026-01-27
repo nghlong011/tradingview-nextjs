@@ -2,6 +2,18 @@
 
 import React, { useEffect, useState } from 'react';
 
+interface ParsedUserAgent {
+  browser?: { name?: string; version?: string };
+  device?: { model?: string; type?: string; vendor?: string };
+  engine?: { name?: string; version?: string };
+  os?: { name?: string; version?: string };
+  cpu?: { architecture?: string };
+  isBot?: boolean;
+  isMobile?: boolean;
+  isTablet?: boolean;
+  isDesktop?: boolean;
+}
+
 interface AccessLog {
   id: number;
   ip: string;
@@ -11,6 +23,7 @@ interface AccessLog {
   asn: number | null;
   timestamp: string;
   user_agent: string | null;
+  user_agent_parsed: string | null;
   headers: string | null;
 }
 
@@ -263,7 +276,34 @@ export default function AdminPage() {
                       } catch (e) {
                         // Invalid JSON
                       }
+                      
+                      let parsedUA: ParsedUserAgent | null = null;
+                      try {
+                        parsedUA = log.user_agent_parsed ? JSON.parse(log.user_agent_parsed) : null;
+                      } catch (e) {
+                        // Invalid JSON
+                      }
+                      
                       const isExpanded = expandedHeaders === log.id;
+                      
+                      // Format parsed UA để hiển thị
+                      const formatUA = () => {
+                        if (!parsedUA) return log.user_agent || '-';
+                        const parts: string[] = [];
+                        if (parsedUA.browser?.name) {
+                          parts.push(`${parsedUA.browser.name}${parsedUA.browser.version ? ` ${parsedUA.browser.version}` : ''}`);
+                        }
+                        if (parsedUA.os?.name) {
+                          parts.push(`(${parsedUA.os.name}${parsedUA.os.version ? ` ${parsedUA.os.version}` : ''})`);
+                        }
+                        if (parsedUA.device?.type) {
+                          parts.push(`[${parsedUA.device.type}]`);
+                        }
+                        if (parsedUA.isBot) {
+                          parts.push('🤖 BOT');
+                        }
+                        return parts.length > 0 ? parts.join(' ') : log.user_agent || '-';
+                      };
                       
                       return (
                         <React.Fragment key={log.id}>
@@ -299,8 +339,25 @@ export default function AdminPage() {
                             <td className="px-4 py-3 text-sm text-slate-400">
                               {formatDate(log.timestamp)}
                             </td>
-                            <td className="px-4 py-3 text-xs text-slate-500 max-w-xs truncate">
-                              {log.user_agent || '-'}
+                            <td className="px-4 py-3 text-xs max-w-xs">
+                              <div className="space-y-1">
+                                <div className={`${parsedUA?.isBot ? 'text-red-400' : parsedUA?.isMobile ? 'text-blue-400' : 'text-slate-300'}`}>
+                                  {formatUA()}
+                                </div>
+                                {parsedUA && (
+                                  <div className="text-[10px] text-slate-500 space-y-0.5">
+                                    {parsedUA.device?.vendor && (
+                                      <div>Device: {parsedUA.device.vendor} {parsedUA.device.model || ''}</div>
+                                    )}
+                                    {parsedUA.engine?.name && (
+                                      <div>Engine: {parsedUA.engine.name} {parsedUA.engine.version || ''}</div>
+                                    )}
+                                    {parsedUA.cpu?.architecture && (
+                                      <div>CPU: {parsedUA.cpu.architecture}</div>
+                                    )}
+                                  </div>
+                                )}
+                              </div>
                             </td>
                             <td className="px-4 py-3 text-xs">
                               {parsedHeaders ? (

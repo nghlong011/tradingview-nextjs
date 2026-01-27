@@ -28,6 +28,7 @@ function getDatabase(): Database.Database {
       asn INTEGER,
       timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
       user_agent TEXT,
+      user_agent_parsed TEXT,
       headers TEXT
     );
 
@@ -41,13 +42,22 @@ function getDatabase(): Database.Database {
     CREATE INDEX IF NOT EXISTS idx_block_reason ON access_logs(block_reason);
   `);
   
-  // Migration: Thêm cột headers nếu chưa tồn tại
+  // Migration: Thêm cột headers và user_agent_parsed nếu chưa tồn tại
   try {
     dbInstance.exec(`ALTER TABLE access_logs ADD COLUMN headers TEXT`);
   } catch (error: any) {
     // Cột đã tồn tại, bỏ qua
     if (!error.message?.includes('duplicate column name')) {
       console.warn('Error adding headers column:', error);
+    }
+  }
+  
+  try {
+    dbInstance.exec(`ALTER TABLE access_logs ADD COLUMN user_agent_parsed TEXT`);
+  } catch (error: any) {
+    // Cột đã tồn tại, bỏ qua
+    if (!error.message?.includes('duplicate column name')) {
+      console.warn('Error adding user_agent_parsed column:', error);
     }
   }
 
@@ -63,8 +73,8 @@ export class SQLiteAdapter implements DatabaseAdapter {
     try {
       const db = getDatabase();
       const stmt = db.prepare(`
-        INSERT INTO access_logs (ip, view, block_reason, organization, asn, user_agent, headers)
-        VALUES (?, ?, ?, ?, ?, ?, ?)
+        INSERT INTO access_logs (ip, view, block_reason, organization, asn, user_agent, user_agent_parsed, headers)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
       `);
       
       stmt.run(
@@ -74,6 +84,7 @@ export class SQLiteAdapter implements DatabaseAdapter {
         log.organization || null,
         log.asn || null,
         log.user_agent || null,
+        log.user_agent_parsed || null,
         log.headers || null
       );
     } catch (error) {
