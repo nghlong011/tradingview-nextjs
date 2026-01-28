@@ -2,6 +2,7 @@ import { Reader } from '@maxmind/geoip2-node';
 import { readFileSync } from 'fs';
 import { join } from 'path';
 import { isBot } from 'ua-parser-js/helpers';
+import { getSetting } from './db';
 
 // Singleton instance cho MaxMind reader
 let readerInstance: ReturnType<typeof Reader.openBuffer> | null = null;
@@ -349,6 +350,40 @@ export function isBotUserAgent(userAgent: string | null): boolean {
 }
 
 /**
+ * Kiểm tra xem có phải click từ quảng cáo không
+ * Dựa vào query parameters (UTM, Google Ads, Facebook, etc.) và referrer header
+ */
+export function isAdClick(searchParams: Record<string, string | string[] | undefined>, referrer: string | null): boolean {
+  // Kiểm tra query parameters
+  const adParams = [
+    // UTM parameters
+    'utm_campaign', 'utm_source', 'utm_medium', 'utm_content', 'utm_term',
+    // Google Ads
+    'gclid', 'gad_source', 'gad_campaignid', 'wbraid', 'gbraid',
+    // Facebook
+    'fbclid',
+    // Other tracking
+    'bid', 'ref', 'source', 'campaign'
+  ];
+  
+  const hasAdParam = adParams.some(param => searchParams[param] !== undefined);
+  
+  // Kiểm tra referrer
+  const adReferrers = [
+    'googleads.g.doubleclick.net',
+    'facebook.com',
+    'fb.com',
+    'linkedin.com',
+    'twitter.com',
+    't.co'
+  ];
+  
+  const hasAdReferrer = referrer && adReferrers.some(domain => referrer.includes(domain));
+  
+  return hasAdParam || !!hasAdReferrer;
+}
+
+/**
  * Kết quả phân tích IP access
  */
 export interface IpAccessResult {
@@ -365,6 +400,7 @@ export interface IpAccessResult {
  * Function chính để phân tích IP và quyết định có cho phép truy cập không
  * 
  * Flow:
+ * 0. Kiểm tra click từ quảng cáo → nếu KHÔNG phải ad click → return false (ViewTwo ngay)
  * 1. Kiểm tra bot user-agent → nếu phát hiện bot → return false
  * 2. Kiểm tra editor/development tool → nếu bị chặn → return false
  * 3. Lấy IP từ request headers
@@ -376,13 +412,42 @@ export interface IpAccessResult {
  * 9. Nếu không phát hiện → return true
  * 
  * @param headers - Next.js headers object
+ * @param searchParams - URL search parameters (query string)
  * @returns Promise<IpAccessResult> - Kết quả phân tích với chi tiết
  */
-export async function analyzeIpAccess(headers: Headers): Promise<IpAccessResult> {
+export async function analyzeIpAccess(
+  headers: Headers,
+  searchParams?: Record<string, string | string[] | undefined>
+): Promise<IpAccessResult> {
   try {
+    // 0. Kiểm tra click từ quảng cáo (BƯỚC ĐẦU TIÊN) - chỉ chạy nếu setting bật
+    const enableAdClickCheck = await getSetting('enableAdClickCheck');
+    const isAdClickCheckEnabled = enableAdClickCheck === 'true';
+    
+    if (isAdClickCheckEnabled) {
+      const referrer = headers.get('referer') || headers.get('referrer') || null;
+      const isAd = searchParams ? isAdClick(searchParams, referrer) : false;
+      
+      // Nếu KHÔNG phải ad click → return false ngay (ViewTwo)
+      if (!isAd) {
+        const ip = getClientIp(headers) || 'unknown';
+        console.log(`Blocked: Not an ad click - showing ViewTwo`);
+        return {
+          allowed: false,
+          reason: 'NOT_AD_CLICK',
+          details: { ip },
+        };
+      }
+      
+      // Nếu là ad click → tiếp tục các bước kiểm tra khác
+      console.log(`Ad click detected, continuing with other checks...`);
+    } else {
+      console.log(`Ad click check is disabled, skipping step 0...`);
+    }
+    
     const userAgent = headers.get('user-agent') || '';
     
-    // 0. Kiểm tra bot user-agent trước (chặn sớm để tiết kiệm tài nguyên)
+    // 1. Kiểm tra bot user-agent (chỉ chạy nếu là ad click)
     if (isBotUserAgent(userAgent)) {
       // Lấy IP để log (có thể là null nếu chưa parse)
       const ip = getClientIp(headers) || 'unknown';
@@ -394,7 +459,7 @@ export async function analyzeIpAccess(headers: Headers): Promise<IpAccessResult>
       };
     }
     
-    // 1. Kiểm tra editor/development tool
+    // 2. Kiểm tra editor/development tool (chỉ chạy nếu là ad click)
     if (isBlockedEditorOrTool(userAgent)) {
       // Lấy IP để log (có thể là null nếu chưa parse)
       const ip = getClientIp(headers) || 'unknown';
@@ -406,7 +471,7 @@ export async function analyzeIpAccess(headers: Headers): Promise<IpAccessResult>
       };
     }
     
-    // 2. Lấy IP từ request headers
+    // 3. Lấy IP từ request headers
     const ip = getClientIp(headers);
     
     // Debug: Log headers nếu không lấy được IP (chỉ trong development)
@@ -431,7 +496,7 @@ export async function analyzeIpAccess(headers: Headers): Promise<IpAccessResult>
       };
     }
 
-    // 3. Xử lý localhost - trong development có thể cho phép, production thì không
+    // 4. Xử lý localhost - trong development có thể cho phép, production thì không
     if (isLocalhost(ip)) {
       const isDevelopment = process.env.NODE_ENV === 'development';
       if (isDevelopment) {
@@ -449,8 +514,7 @@ export async function analyzeIpAccess(headers: Headers): Promise<IpAccessResult>
         };
       }
     }
-
-    // 4. Lấy thông tin ASN
+    // 5. Lấy thông tin ASN
     const asnInfo = await getAsnInfo(ip);
     
     if (!asnInfo.organization) {
@@ -466,7 +530,7 @@ export async function analyzeIpAccess(headers: Headers): Promise<IpAccessResult>
       };
     }
 
-    // 5. Kiểm tra proxy/VPN
+    // 6. Kiểm tra proxy/VPN
     if (isProxyOrVpn(asnInfo.organization)) {
       console.log(`Blocked: Proxy/VPN detected for IP ${ip}, Organization: ${asnInfo.organization}`);
       return {
@@ -480,7 +544,7 @@ export async function analyzeIpAccess(headers: Headers): Promise<IpAccessResult>
       };
     }
 
-    // 6. Kiểm tra IP doanh nghiệp
+    // 7. Kiểm tra IP doanh nghiệp
     if (isBusinessIp(asnInfo.organization)) {
       console.log(`Blocked: Business IP detected for IP ${ip}, Organization: ${asnInfo.organization}`);
       return {
@@ -494,7 +558,7 @@ export async function analyzeIpAccess(headers: Headers): Promise<IpAccessResult>
       };
     }
 
-    // 7. Không phát hiện bot, editor/tool, proxy/VPN hoặc doanh nghiệp → cho phép
+    // 8. Không phát hiện bot, editor/tool, proxy/VPN hoặc doanh nghiệp → cho phép (ViewOne)
     console.log(`Allowed: IP ${ip}, Organization: ${asnInfo.organization}`);
     return {
       allowed: true,

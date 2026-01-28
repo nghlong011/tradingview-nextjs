@@ -172,6 +172,15 @@ export class PostgresAdapter implements DatabaseAdapter {
         // Cột đã tồn tại hoặc lỗi khác, bỏ qua
         console.warn('Error adding user_agent_parsed column (may already exist):', error);
       }
+
+      // Tạo bảng settings
+      await pool.query(`
+        CREATE TABLE IF NOT EXISTS settings (
+          key TEXT PRIMARY KEY,
+          value TEXT NOT NULL,
+          updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        );
+      `);
     });
   }
 
@@ -336,5 +345,31 @@ export class PostgresAdapter implements DatabaseAdapter {
         topIPs,
       };
     });
+  }
+
+  async getSetting(key: string): Promise<string | null> {
+    const pool = getPool();
+    try {
+      const result = await pool.query('SELECT value FROM settings WHERE key = $1', [key]);
+      return result.rows[0]?.value || null;
+    } catch (error) {
+      console.error('Error getting setting:', error);
+      return null;
+    }
+  }
+
+  async setSetting(key: string, value: string): Promise<void> {
+    const pool = getPool();
+    try {
+      await pool.query(
+        `INSERT INTO settings (key, value, updated_at)
+         VALUES ($1, $2, CURRENT_TIMESTAMP)
+         ON CONFLICT(key) DO UPDATE SET value = $2, updated_at = CURRENT_TIMESTAMP`,
+        [key, value]
+      );
+    } catch (error) {
+      console.error('Error setting setting:', error);
+      throw error;
+    }
   }
 }

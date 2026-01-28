@@ -56,6 +56,8 @@ export default function AdminPage() {
     view: '' as '' | 'ViewOne' | 'ViewTwo',
     block_reason: '',
   });
+  const [enableAdClickCheck, setEnableAdClickCheck] = useState<boolean>(false);
+  const [loadingSetting, setLoadingSetting] = useState(true);
 
   const fetchLogs = async () => {
     setLoading(true);
@@ -92,9 +94,46 @@ export default function AdminPage() {
     }
   };
 
+  const fetchSetting = async () => {
+    try {
+      setLoadingSetting(true);
+      const response = await fetch('/api/admin/settings?key=enableAdClickCheck');
+      const data = await response.json();
+      setEnableAdClickCheck(data.value === 'true');
+    } catch (error) {
+      console.error('Error fetching setting:', error);
+    } finally {
+      setLoadingSetting(false);
+    }
+  };
+
+  const updateSetting = async (value: boolean) => {
+    try {
+      const response = await fetch('/api/admin/settings', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          key: 'enableAdClickCheck',
+          value: value.toString(),
+        }),
+      });
+      
+      if (response.ok) {
+        setEnableAdClickCheck(value);
+      } else {
+        console.error('Error updating setting');
+      }
+    } catch (error) {
+      console.error('Error updating setting:', error);
+    }
+  };
+
   useEffect(() => {
     fetchLogs();
     fetchStats();
+    fetchSetting();
   }, [page]);
 
   useEffect(() => {
@@ -122,6 +161,7 @@ export default function AdminPage() {
     BUSINESS_IP_DETECTED: 'Phát hiện IP doanh nghiệp',
     BOT_DETECTED: 'Phát hiện Bot (Googlebot, Bingbot, etc.)',
     BLOCKED_USER_AGENT: 'User-agent bị chặn (Editor/Tool)',
+    NOT_AD_CLICK: 'Không phải click từ quảng cáo',
     ERROR: 'Lỗi xử lý',
   };
 
@@ -129,6 +169,33 @@ export default function AdminPage() {
     <div className="min-h-screen bg-slate-950 text-slate-100 p-6">
       <div className="max-w-7xl mx-auto">
         <h1 className="text-3xl font-bold mb-6">Admin - Thống kê IP truy cập</h1>
+
+        {/* Settings Toggle */}
+        <div className="bg-slate-900 rounded-lg p-4 border border-slate-800 mb-6">
+          <div className="flex items-center justify-between">
+            <div>
+              <h2 className="text-lg font-semibold mb-1">Kiểm tra Click Quảng Cáo (Bước 0)</h2>
+              <p className="text-sm text-slate-400">
+                {enableAdClickCheck 
+                  ? 'Đang bật: Chỉ hiển thị ViewOne cho click từ quảng cáo' 
+                  : 'Đang tắt: Bỏ qua bước kiểm tra click quảng cáo'}
+              </p>
+            </div>
+            <button
+              onClick={() => updateSetting(!enableAdClickCheck)}
+              disabled={loadingSetting}
+              className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
+                enableAdClickCheck ? 'bg-emerald-500' : 'bg-slate-600'
+              } ${loadingSetting ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}
+            >
+              <span
+                className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                  enableAdClickCheck ? 'translate-x-6' : 'translate-x-1'
+                }`}
+              />
+            </button>
+          </div>
+        </div>
 
         {/* Statistics */}
         {stats && (

@@ -45,5 +45,7 @@ export interface DatabaseAdapter {
   saveAccessLog(log: AccessLog): void | Promise<void>;
   getAccessLogs(params: LogQueryParams): LogQueryResult | Promise<LogQueryResult>;
   getStatistics(): Statistics | Promise<Statistics>;
+  getSetting(key: string): string | null | Promise<string | null>;
+  setSetting(key: string, value: string): void | Promise<void>;
   initialize(): void | Promise<void>;
 }

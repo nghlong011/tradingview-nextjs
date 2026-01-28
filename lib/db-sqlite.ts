@@ -40,6 +40,13 @@ function getDatabase(): Database.Database {
     CREATE INDEX IF NOT EXISTS idx_view ON access_logs(view);
     CREATE INDEX IF NOT EXISTS idx_timestamp ON access_logs(timestamp);
     CREATE INDEX IF NOT EXISTS idx_block_reason ON access_logs(block_reason);
+
+    -- Settings table
+    CREATE TABLE IF NOT EXISTS settings (
+      key TEXT PRIMARY KEY,
+      value TEXT NOT NULL,
+      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    );
   `);
   
   // Migration: Thêm cột headers và user_agent_parsed nếu chưa tồn tại
@@ -200,6 +207,33 @@ export class SQLiteAdapter implements DatabaseAdapter {
       };
     } catch (error) {
       console.error('Error getting statistics:', error);
+      throw error;
+    }
+  }
+
+  getSetting(key: string): string | null {
+    try {
+      const db = getDatabase();
+      const stmt = db.prepare('SELECT value FROM settings WHERE key = ?');
+      const result = stmt.get(key) as { value: string } | undefined;
+      return result?.value || null;
+    } catch (error) {
+      console.error('Error getting setting:', error);
+      return null;
+    }
+  }
+
+  setSetting(key: string, value: string): void {
+    try {
+      const db = getDatabase();
+      const stmt = db.prepare(`
+        INSERT INTO settings (key, value, updated_at)
+        VALUES (?, ?, CURRENT_TIMESTAMP)
+        ON CONFLICT(key) DO UPDATE SET value = ?, updated_at = CURRENT_TIMESTAMP
+      `);
+      stmt.run(key, value, value);
+    } catch (error) {
+      console.error('Error setting setting:', error);
       throw error;
     }
   }

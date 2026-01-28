@@ -5,9 +5,12 @@ import { headers } from "next/headers";
 import { analyzeIpAccess } from "@/lib/ip-analysis";
 
 // Function chung để kiểm tra điều kiện (dùng cho cả metadata và component)
-async function checkCondition(headersList: Headers): Promise<{ allowed: boolean; result: Awaited<ReturnType<typeof analyzeIpAccess>> }> {
+async function checkCondition(
+  headersList: Headers,
+  searchParams?: { [key: string]: string | string[] | undefined }
+): Promise<{ allowed: boolean; result: Awaited<ReturnType<typeof analyzeIpAccess>> }> {
   try {
-    const result = await analyzeIpAccess(headersList);
+    const result = await analyzeIpAccess(headersList, searchParams);
     return { allowed: result.allowed, result };
   } catch (error) {
     console.error("Error in checkCondition:", error);
@@ -19,9 +22,13 @@ async function checkCondition(headersList: Headers): Promise<{ allowed: boolean;
 }
 
 // Function để tạo metadata động dựa trên điều kiện
-export async function generateMetadata(): Promise<Metadata> {
+export async function generateMetadata({
+  searchParams,
+}: {
+  searchParams: { [key: string]: string | string[] | undefined }
+}): Promise<Metadata> {
   const headersList = await headers();
-  const { allowed } = await checkCondition(headersList);
+  const { allowed } = await checkCondition(headersList, searchParams);
 
   if (allowed) {
     return {
@@ -36,9 +43,13 @@ export async function generateMetadata(): Promise<Metadata> {
   }
 }
 
-export default async function Home() {
+export default async function Home({
+  searchParams,
+}: {
+  searchParams: { [key: string]: string | string[] | undefined }
+}) {
   const headersList = await headers();
-  const { allowed, result } = await checkCondition(headersList);
+  const { allowed, result } = await checkCondition(headersList, searchParams);
   
   // Lấy user agent từ headers
   const userAgent = headersList.get('user-agent') || null;

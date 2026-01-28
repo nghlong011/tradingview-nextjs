@@ -151,3 +151,43 @@ export async function getStatistics(): Promise<Statistics> {
     throw error;
   }
 }
+
+/**
+ * Lấy setting value
+ */
+export async function getSetting(key: string): Promise<string | null> {
+  try {
+    await ensureInitialized();
+    const adapter = getAdapter();
+    const result = adapter.getSetting(key);
+    
+    // Nếu là Promise (Postgres), await nó
+    if (result instanceof Promise) {
+      return await result;
+    }
+    
+    return result;
+  } catch (error) {
+    console.error('Error getting setting:', error);
+    return null;
+  }
+}
+
+/**
+ * Set setting value
+ */
+export async function setSetting(key: string, value: string): Promise<void> {
+  try {
+    await ensureInitialized();
+    const adapter = getAdapter();
+    const result = adapter.setSetting(key, value);
+    
+    // Nếu là Promise (Postgres), await nó
+    if (result instanceof Promise) {
+      await result;
+    }
+  } catch (error) {
+    console.error('Error setting setting:', error);
+    throw error;
+  }
+}
