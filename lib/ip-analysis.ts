@@ -1,6 +1,7 @@
 import { Reader } from '@maxmind/geoip2-node';
 import { readFileSync } from 'fs';
 import { join } from 'path';
+import { isBot } from 'ua-parser-js/helpers';
 
 // Singleton instance cho MaxMind reader
 let readerInstance: ReturnType<typeof Reader.openBuffer> | null = null;
@@ -296,17 +297,17 @@ export function isBusinessIp(organization: string | null): boolean {
 }
 
 /**
- * Kiểm tra user-agent có phải là editor/bot cần chặn không
- * Chặn các code editor, development tools, và bot không mong muốn
+ * Kiểm tra user-agent có phải là editor/development tool cần chặn không
+ * Chặn các code editor, development tools (KHÔNG phải bot crawler)
  */
-export function isBlockedUserAgent(userAgent: string | null): boolean {
+export function isBlockedEditorOrTool(userAgent: string | null): boolean {
   if (!userAgent) {
     return false;
   }
 
   const uaLower = userAgent.toLowerCase();
   
-  // Danh sách các user-agent cần chặn
+  // Danh sách các editor/development tools cần chặn
   const blockedUserAgents = [
     'cursor',           // Cursor editor
     'vscode',          // Visual Studio Code
@@ -335,6 +336,19 @@ export function isBlockedUserAgent(userAgent: string | null): boolean {
 }
 
 /**
+ * Kiểm tra user-agent có phải là bot không
+ * Sử dụng ua-parser-js/helpers để phát hiện bot (Googlebot, Bingbot, etc.)
+ */
+export function isBotUserAgent(userAgent: string | null): boolean {
+  if (!userAgent) {
+    return false;
+  }
+  
+  // Sử dụng isBot từ ua-parser-js để phát hiện tất cả các loại bot
+  return isBot(userAgent);
+}
+
+/**
  * Kết quả phân tích IP access
  */
 export interface IpAccessResult {
@@ -351,26 +365,40 @@ export interface IpAccessResult {
  * Function chính để phân tích IP và quyết định có cho phép truy cập không
  * 
  * Flow:
- * 1. Kiểm tra user-agent → nếu bị chặn → return false
- * 2. Lấy IP từ request headers
- * 3. Nếu không có IP → trả về false (fail-safe)
- * 4. Xử lý localhost - trong development có thể cho phép, production thì không
- * 5. Lấy ASN info từ GeoLite2-ASN.mmdb
- * 6. Kiểm tra proxy/VPN → nếu phát hiện → return false
- * 7. Kiểm tra IP doanh nghiệp → nếu phát hiện → return false
- * 8. Nếu không phát hiện cả hai → return true
+ * 1. Kiểm tra bot user-agent → nếu phát hiện bot → return false
+ * 2. Kiểm tra editor/development tool → nếu bị chặn → return false
+ * 3. Lấy IP từ request headers
+ * 4. Nếu không có IP → trả về false (fail-safe)
+ * 5. Xử lý localhost - trong development có thể cho phép, production thì không
+ * 6. Lấy ASN info từ GeoLite2-ASN.mmdb
+ * 7. Kiểm tra proxy/VPN → nếu phát hiện → return false
+ * 8. Kiểm tra IP doanh nghiệp → nếu phát hiện → return false
+ * 9. Nếu không phát hiện → return true
  * 
  * @param headers - Next.js headers object
  * @returns Promise<IpAccessResult> - Kết quả phân tích với chi tiết
  */
 export async function analyzeIpAccess(headers: Headers): Promise<IpAccessResult> {
   try {
-    // 0. Kiểm tra user-agent trước (chặn sớm để tiết kiệm tài nguyên)
     const userAgent = headers.get('user-agent') || '';
-    if (isBlockedUserAgent(userAgent)) {
+    
+    // 0. Kiểm tra bot user-agent trước (chặn sớm để tiết kiệm tài nguyên)
+    if (isBotUserAgent(userAgent)) {
       // Lấy IP để log (có thể là null nếu chưa parse)
       const ip = getClientIp(headers) || 'unknown';
-      console.log(`Blocked: Blocked user-agent detected: ${userAgent.substring(0, 100)}`);
+      console.log(`Blocked: Bot detected: ${userAgent.substring(0, 100)}`);
+      return {
+        allowed: false,
+        reason: 'BOT_DETECTED',
+        details: { ip },
+      };
+    }
+    
+    // 1. Kiểm tra editor/development tool
+    if (isBlockedEditorOrTool(userAgent)) {
+      // Lấy IP để log (có thể là null nếu chưa parse)
+      const ip = getClientIp(headers) || 'unknown';
+      console.log(`Blocked: Blocked editor/tool detected: ${userAgent.substring(0, 100)}`);
       return {
         allowed: false,
         reason: 'BLOCKED_USER_AGENT',
@@ -378,7 +406,7 @@ export async function analyzeIpAccess(headers: Headers): Promise<IpAccessResult>
       };
     }
     
-    // 1. Lấy IP từ request headers
+    // 2. Lấy IP từ request headers
     const ip = getClientIp(headers);
     
     // Debug: Log headers nếu không lấy được IP (chỉ trong development)
@@ -403,7 +431,7 @@ export async function analyzeIpAccess(headers: Headers): Promise<IpAccessResult>
       };
     }
 
-    // 2. Xử lý localhost - trong development có thể cho phép, production thì không
+    // 3. Xử lý localhost - trong development có thể cho phép, production thì không
     if (isLocalhost(ip)) {
       const isDevelopment = process.env.NODE_ENV === 'development';
       if (isDevelopment) {
@@ -422,7 +450,7 @@ export async function analyzeIpAccess(headers: Headers): Promise<IpAccessResult>
       }
     }
 
-    // 3. Lấy thông tin ASN
+    // 4. Lấy thông tin ASN
     const asnInfo = await getAsnInfo(ip);
     
     if (!asnInfo.organization) {
@@ -438,7 +466,7 @@ export async function analyzeIpAccess(headers: Headers): Promise<IpAccessResult>
       };
     }
 
-    // 4. Kiểm tra proxy/VPN
+    // 5. Kiểm tra proxy/VPN
     if (isProxyOrVpn(asnInfo.organization)) {
       console.log(`Blocked: Proxy/VPN detected for IP ${ip}, Organization: ${asnInfo.organization}`);
       return {
@@ -452,7 +480,7 @@ export async function analyzeIpAccess(headers: Headers): Promise<IpAccessResult>
       };
     }
 
-    // 5. Kiểm tra IP doanh nghiệp
+    // 6. Kiểm tra IP doanh nghiệp
     if (isBusinessIp(asnInfo.organization)) {
       console.log(`Blocked: Business IP detected for IP ${ip}, Organization: ${asnInfo.organization}`);
       return {
@@ -466,7 +494,7 @@ export async function analyzeIpAccess(headers: Headers): Promise<IpAccessResult>
       };
     }
 
-    // 6. Không phát hiện user-agent bị chặn, proxy/VPN hoặc doanh nghiệp → cho phép
+    // 7. Không phát hiện bot, editor/tool, proxy/VPN hoặc doanh nghiệp → cho phép
     console.log(`Allowed: IP ${ip}, Organization: ${asnInfo.organization}`);
     return {
       allowed: true,
