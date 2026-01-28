@@ -120,6 +120,7 @@ export default function AdminPage() {
     NO_ASN_ORGANIZATION: 'Không có ASN organization',
     PROXY_VPN_DETECTED: 'Phát hiện Proxy/VPN',
     BUSINESS_IP_DETECTED: 'Phát hiện IP doanh nghiệp',
+    BLOCKED_USER_AGENT: 'User-agent bị chặn (Editor/Bot)',
     ERROR: 'Lỗi xử lý',
   };
 

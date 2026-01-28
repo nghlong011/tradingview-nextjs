@@ -296,6 +296,45 @@ export function isBusinessIp(organization: string | null): boolean {
 }
 
 /**
+ * Kiểm tra user-agent có phải là editor/bot cần chặn không
+ * Chặn các code editor, development tools, và bot không mong muốn
+ */
+export function isBlockedUserAgent(userAgent: string | null): boolean {
+  if (!userAgent) {
+    return false;
+  }
+
+  const uaLower = userAgent.toLowerCase();
+  
+  // Danh sách các user-agent cần chặn
+  const blockedUserAgents = [
+    'cursor',           // Cursor editor
+    'vscode',          // Visual Studio Code
+    'code-server',     // VS Code Server
+    'insomnia',        // Insomnia API client
+    'postman',         // Postman
+    'httpie',          // HTTPie
+    'curl',            // cURL (có thể chặn hoặc không tùy nhu cầu)
+    'wget',            // wget
+    'python-requests', // Python requests library
+    'go-http-client',  // Go HTTP client
+    'java/',           // Java HTTP clients
+    'node-fetch',      // Node.js fetch
+    'axios',           // Axios HTTP client
+    'okhttp',          // OkHttp (Android/Java)
+    'apache-httpclient', // Apache HTTP Client
+    'scrapy',          // Scrapy web crawler
+    'headless',        // Headless browsers
+    'phantomjs',       // PhantomJS
+    'selenium',        // Selenium
+    'puppeteer',       // Puppeteer
+    'playwright',      // Playwright
+  ];
+
+  return blockedUserAgents.some(blocked => uaLower.includes(blocked));
+}
+
+/**
  * Kết quả phân tích IP access
  */
 export interface IpAccessResult {
@@ -312,24 +351,38 @@ export interface IpAccessResult {
  * Function chính để phân tích IP và quyết định có cho phép truy cập không
  * 
  * Flow:
- * 1. Lấy IP từ request headers
- * 2. Nếu không có IP → trả về false (fail-safe)
- * 3. Lấy ASN info từ GeoLite2-ASN.mmdb
- * 4. Kiểm tra proxy/VPN → nếu phát hiện → return false
- * 5. Kiểm tra IP doanh nghiệp → nếu phát hiện → return false
- * 6. Nếu không phát hiện cả hai → return true
+ * 1. Kiểm tra user-agent → nếu bị chặn → return false
+ * 2. Lấy IP từ request headers
+ * 3. Nếu không có IP → trả về false (fail-safe)
+ * 4. Xử lý localhost - trong development có thể cho phép, production thì không
+ * 5. Lấy ASN info từ GeoLite2-ASN.mmdb
+ * 6. Kiểm tra proxy/VPN → nếu phát hiện → return false
+ * 7. Kiểm tra IP doanh nghiệp → nếu phát hiện → return false
+ * 8. Nếu không phát hiện cả hai → return true
  * 
  * @param headers - Next.js headers object
  * @returns Promise<IpAccessResult> - Kết quả phân tích với chi tiết
  */
 export async function analyzeIpAccess(headers: Headers): Promise<IpAccessResult> {
   try {
+    // 0. Kiểm tra user-agent trước (chặn sớm để tiết kiệm tài nguyên)
+    const userAgent = headers.get('user-agent') || '';
+    if (isBlockedUserAgent(userAgent)) {
+      // Lấy IP để log (có thể là null nếu chưa parse)
+      const ip = getClientIp(headers) || 'unknown';
+      console.log(`Blocked: Blocked user-agent detected: ${userAgent.substring(0, 100)}`);
+      return {
+        allowed: false,
+        reason: 'BLOCKED_USER_AGENT',
+        details: { ip },
+      };
+    }
+    
     // 1. Lấy IP từ request headers
     const ip = getClientIp(headers);
     
     // Debug: Log headers nếu không lấy được IP (chỉ trong development)
     if (!ip && process.env.NODE_ENV === 'development') {
-      const userAgent = headers.get('user-agent') || '';
       const xForwardedFor = headers.get('x-forwarded-for') || '';
       console.log('Debug - Could not get IP:', {
         userAgent,
@@ -413,7 +466,7 @@ export async function analyzeIpAccess(headers: Headers): Promise<IpAccessResult>
       };
     }
 
-    // 6. Không phát hiện proxy/VPN hoặc doanh nghiệp → cho phép
+    // 6. Không phát hiện user-agent bị chặn, proxy/VPN hoặc doanh nghiệp → cho phép
     console.log(`Allowed: IP ${ip}, Organization: ${asnInfo.organization}`);
     return {
       allowed: true,
