@@ -42,6 +42,16 @@ export interface Statistics {
   topIPs: Array<{ ip: string; count: number }>;
 }
 
+/**
+ * Admin user cho trang quản trị
+ */
+export interface AdminUser {
+  id: number;
+  username: string;
+  password_hash: string;
+  created_at?: string;
+}
+
 export interface DatabaseAdapter {
   saveAccessLog(log: AccessLog): void | Promise<void>;
   getAccessLogs(params: LogQueryParams): LogQueryResult | Promise<LogQueryResult>;
@@ -49,4 +59,9 @@ export interface DatabaseAdapter {
   getSetting(key: string): string | null | Promise<string | null>;
   setSetting(key: string, value: string): void | Promise<void>;
   initialize(): void | Promise<void>;
+
+  // Admin
+  getAdminByUsername(username: string): AdminUser | null | Promise<AdminUser | null>;
+  createAdminIfNotExists(username: string, passwordHash: string): void | Promise<void>;
 }
+

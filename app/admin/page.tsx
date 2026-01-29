@@ -1,14 +1,7 @@
 'use client';
 
 import React, { useEffect, useState } from 'react';
-
-const ADMIN_API_KEY = process.env.NEXT_PUBLIC_ADMIN_API_KEY ?? '';
-
-function adminHeaders(): Record<string, string> {
-  const h: Record<string, string> = {};
-  if (ADMIN_API_KEY) h['x-admin-key'] = ADMIN_API_KEY;
-  return h;
-}
+import { useRouter } from 'next/navigation';
 
 interface ParsedUserAgent {
   browser?: { name?: string; version?: string };
@@ -52,6 +45,7 @@ interface Statistics {
 }
 
 export default function AdminPage() {
+  const router = useRouter();
   const [logs, setLogs] = useState<AccessLog[]>([]);
   const [stats, setStats] = useState<Statistics | null>(null);
   const [loading, setLoading] = useState(true);
@@ -79,7 +73,7 @@ export default function AdminPage() {
       if (filters.view) params.append('view', filters.view);
       if (filters.block_reason) params.append('block_reason', filters.block_reason);
 
-      const response = await fetch(`/api/admin/logs?${params.toString()}`, { headers: adminHeaders() });
+      const response = await fetch(`/api/admin/logs?${params.toString()}`);
       const data: LogQueryResult = await response.json();
       
       setLogs(data.logs);
@@ -94,7 +88,7 @@ export default function AdminPage() {
 
   const fetchStats = async () => {
     try {
-      const response = await fetch('/api/admin/stats', { headers: adminHeaders() });
+      const response = await fetch('/api/admin/stats');
       const data: Statistics = await response.json();
       setStats(data);
     } catch (error) {
@@ -105,7 +99,7 @@ export default function AdminPage() {
   const fetchSetting = async () => {
     try {
       setLoadingSetting(true);
-      const response = await fetch('/api/admin/settings?key=enableAdClickCheck', { headers: adminHeaders() });
+      const response = await fetch('/api/admin/settings?key=enableAdClickCheck');
       const data = await response.json();
       setEnableAdClickCheck(data.value === 'true');
     } catch (error) {
@@ -121,7 +115,6 @@ export default function AdminPage() {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          ...adminHeaders(),
         },
         body: JSON.stringify({
           key: 'enableAdClickCheck',
@@ -177,7 +170,23 @@ export default function AdminPage() {
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 p-6">
       <div className="max-w-7xl mx-auto">
-        <h1 className="text-3xl font-bold mb-6">Admin - Thống kê IP truy cập</h1>
+        <div className="flex items-center justify-between mb-6 gap-4">
+          <h1 className="text-3xl font-bold">Admin - Thống kê IP truy cập</h1>
+          <button
+            onClick={async () => {
+              try {
+                await fetch('/api/admin/logout', { method: 'POST' });
+              } catch (error) {
+                console.error('Error during admin logout:', error);
+              } finally {
+                router.push('/admin/login');
+              }
+            }}
+            className="px-4 py-2 rounded-md bg-slate-800 hover:bg-slate-700 text-sm font-medium text-slate-100 border border-slate-600 transition-colors"
+          >
+            Đăng xuất
+          </button>
+        </div>
 
         {/* Settings Toggle */}
         <div className="bg-slate-900 rounded-lg p-4 border border-slate-800 mb-6">

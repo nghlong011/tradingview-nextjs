@@ -1,7 +1,15 @@
 import Database from 'better-sqlite3';
 import { join } from 'path';
 import { existsSync, mkdirSync } from 'fs';
-import type { DatabaseAdapter, AccessLog, LogQueryParams, LogQueryResult, Statistics } from './db-adapter';
+import type {
+  DatabaseAdapter,
+  AccessLog,
+  LogQueryParams,
+  LogQueryResult,
+  Statistics,
+  AdminUser,
+} from './db-adapter';
+import { hashPassword } from './password';
 
 let dbInstance: Database.Database | null = null;
 
@@ -46,6 +54,14 @@ function getDatabase(): Database.Database {
       key TEXT PRIMARY KEY,
       value TEXT NOT NULL,
       updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      );
+
+      -- Admin users table
+      CREATE TABLE IF NOT EXISTS admins (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        username TEXT NOT NULL UNIQUE,
+        password_hash TEXT NOT NULL,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
     );
   `);
   
@@ -81,7 +97,16 @@ function getDatabase(): Database.Database {
 
 export class SQLiteAdapter implements DatabaseAdapter {
   initialize(): void {
-    getDatabase(); // Khởi tạo database
+    // Khởi tạo database và đảm bảo bảng đã tồn tại
+    getDatabase();
+
+    // Seed tài khoản admin mặc định nếu chưa có
+    try {
+      const defaultPasswordHash = hashPassword('Long190720');
+      this.createAdminIfNotExists('admin', defaultPasswordHash);
+    } catch (error) {
+      console.error('Error seeding default admin user (SQLite):', error);
+    }
   }
 
   saveAccessLog(log: AccessLog): void {
@@ -243,6 +268,54 @@ export class SQLiteAdapter implements DatabaseAdapter {
       stmt.run(key, value, value);
     } catch (error) {
       console.error('Error setting setting:', error);
+      throw error;
+    }
+  }
+
+  getAdminByUsername(username: string): AdminUser | null {
+    try {
+      const db = getDatabase();
+      const stmt = db.prepare(
+        'SELECT id, username, password_hash, created_at FROM admins WHERE username = ? LIMIT 1'
+      );
+      const row = stmt.get(username) as
+        | {
+            id: number;
+            username: string;
+            password_hash: string;
+            created_at?: string;
+          }
+        | undefined;
+      if (!row) {
+        return null;
+      }
+      return {
+        id: row.id,
+        username: row.username,
+        password_hash: row.password_hash,
+        created_at: row.created_at,
+      };
+    } catch (error) {
+      console.error('Error getting admin by username (SQLite):', error);
+      return null;
+    }
+  }
+
+  createAdminIfNotExists(username: string, passwordHash: string): void {
+    try {
+      const db = getDatabase();
+      const checkStmt = db.prepare('SELECT id FROM admins WHERE username = ? LIMIT 1');
+      const existing = checkStmt.get(username) as { id: number } | undefined;
+      if (existing) {
+        return;
+      }
+
+      const insertStmt = db.prepare(
+        'INSERT INTO admins (username, password_hash) VALUES (?, ?)'
+      );
+      insertStmt.run(username, passwordHash);
+    } catch (error) {
+      console.error('Error creating admin user if not exists (SQLite):', error);
       throw error;
     }
   }

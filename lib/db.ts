@@ -1,9 +1,16 @@
 import { SQLiteAdapter } from './db-sqlite';
 import { PostgresAdapter } from './db-postgres';
-import type { DatabaseAdapter, AccessLog, LogQueryParams, LogQueryResult, Statistics } from './db-adapter';
+import type {
+  DatabaseAdapter,
+  AccessLog,
+  LogQueryParams,
+  LogQueryResult,
+  Statistics,
+  AdminUser,
+} from './db-adapter';
 
 // Export types
-export type { AccessLog, LogQueryParams, LogQueryResult, Statistics };
+export type { AccessLog, LogQueryParams, LogQueryResult, Statistics, AdminUser };
 
 // Singleton instance cho database adapter
 let dbAdapter: DatabaseAdapter | null = null;
@@ -188,6 +195,47 @@ export async function setSetting(key: string, value: string): Promise<void> {
     }
   } catch (error) {
     console.error('Error setting setting:', error);
+    throw error;
+  }
+}
+
+/**
+ * Lấy admin theo username
+ */
+export async function getAdminByUsername(username: string): Promise<AdminUser | null> {
+  try {
+    await ensureInitialized();
+    const adapter = getAdapter();
+    const result = adapter.getAdminByUsername(username);
+
+    if (result instanceof Promise) {
+      return await result;
+    }
+
+    return result;
+  } catch (error) {
+    console.error('Error getting admin by username:', error);
+    return null;
+  }
+}
+
+/**
+ * Tạo admin nếu chưa tồn tại (wrapper, nếu cần dùng ở chỗ khác)
+ */
+export async function createAdminIfNotExists(
+  username: string,
+  passwordHash: string
+): Promise<void> {
+  try {
+    await ensureInitialized();
+    const adapter = getAdapter();
+    const result = adapter.createAdminIfNotExists(username, passwordHash);
+
+    if (result instanceof Promise) {
+      await result;
+    }
+  } catch (error) {
+    console.error('Error creating admin user if not exists:', error);
     throw error;
   }
 }

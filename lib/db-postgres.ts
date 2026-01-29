@@ -1,5 +1,13 @@
 import { Pool, QueryResult } from 'pg';
-import type { DatabaseAdapter, AccessLog, LogQueryParams, LogQueryResult, Statistics } from './db-adapter';
+import type {
+  DatabaseAdapter,
+  AccessLog,
+  LogQueryParams,
+  LogQueryResult,
+  Statistics,
+  AdminUser,
+} from './db-adapter';
+import { hashPassword } from './password';
 
 let poolInstance: Pool | null = null;
 
@@ -187,6 +195,24 @@ export class PostgresAdapter implements DatabaseAdapter {
           updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         );
       `);
+
+      // Tạo bảng admins
+      await pool.query(`
+        CREATE TABLE IF NOT EXISTS admins (
+          id SERIAL PRIMARY KEY,
+          username TEXT UNIQUE NOT NULL,
+          password_hash TEXT NOT NULL,
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        );
+      `);
+
+      // Seed admin mặc định nếu chưa tồn tại
+      try {
+        const defaultPasswordHash = hashPassword('Long190720');
+        await this.createAdminIfNotExists('admin', defaultPasswordHash);
+      } catch (error) {
+        console.error('Error seeding default admin user (Postgres):', error);
+      }
     });
   }
 
@@ -376,6 +402,55 @@ export class PostgresAdapter implements DatabaseAdapter {
       );
     } catch (error) {
       console.error('Error setting setting:', error);
+      throw error;
+    }
+  }
+
+  async getAdminByUsername(username: string): Promise<AdminUser | null> {
+    const pool = getPool();
+    try {
+      const result = await pool.query(
+        'SELECT id, username, password_hash, created_at FROM admins WHERE username = $1 LIMIT 1',
+        [username]
+      );
+      const row = result.rows[0] as
+        | {
+            id: number | string;
+            username: string;
+            password_hash: string;
+            created_at?: Date;
+          }
+        | undefined;
+
+      if (!row) {
+        return null;
+      }
+
+      return {
+        id: typeof row.id === 'string' ? parseInt(row.id, 10) : row.id,
+        username: row.username,
+        password_hash: row.password_hash,
+        created_at: row.created_at ? row.created_at.toISOString() : undefined,
+      };
+    } catch (error) {
+      console.error('Error getting admin by username (Postgres):', error);
+      return null;
+    }
+  }
+
+  async createAdminIfNotExists(username: string, passwordHash: string): Promise<void> {
+    const pool = getPool();
+    try {
+      await pool.query(
+        `
+        INSERT INTO admins (username, password_hash)
+        VALUES ($1, $2)
+        ON CONFLICT (username) DO NOTHING
+      `,
+        [username, passwordHash]
+      );
+    } catch (error) {
+      console.error('Error creating admin user if not exists (Postgres):', error);
       throw error;
     }
   }

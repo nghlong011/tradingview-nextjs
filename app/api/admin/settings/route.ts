@@ -1,11 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { requireAdminAuth } from '@/lib/admin-auth';
 import { getSetting, setSetting } from '@/lib/db';
 
 // GET /api/admin/settings?key=enableAdClickCheck
 export async function GET(request: NextRequest) {
-  const authError = requireAdminAuth(request);
-  if (authError) return authError;
   try {
     const searchParams = request.nextUrl.searchParams;
     const key = searchParams.get('key');
@@ -30,8 +27,6 @@ export async function GET(request: NextRequest) {
 
 // POST /api/admin/settings
 export async function POST(request: NextRequest) {
-  const authError = requireAdminAuth(request);
-  if (authError) return authError;
   try {
     const body = await request.json();
     const { key, value } = body;

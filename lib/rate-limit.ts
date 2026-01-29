@@ -52,3 +52,7 @@ export const UNLOCK_VIEW_LIMIT = 10;
 
 /** Giới hạn log-access: 20 lần / IP / phút */
 export const LOG_ACCESS_LIMIT = 20;
+
+/** Giới hạn login admin: 10 lần / IP / 5 phút */
+export const ADMIN_LOGIN_LIMIT = 10;
+export const ADMIN_LOGIN_WINDOW_MS = 5 * 60 * 1000;
