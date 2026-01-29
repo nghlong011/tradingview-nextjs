@@ -2,6 +2,14 @@
 
 import React, { useEffect, useState } from 'react';
 
+const ADMIN_API_KEY = process.env.NEXT_PUBLIC_ADMIN_API_KEY ?? '';
+
+function adminHeaders(): Record<string, string> {
+  const h: Record<string, string> = {};
+  if (ADMIN_API_KEY) h['x-admin-key'] = ADMIN_API_KEY;
+  return h;
+}
+
 interface ParsedUserAgent {
   browser?: { name?: string; version?: string };
   device?: { model?: string; type?: string; vendor?: string };
@@ -71,7 +79,7 @@ export default function AdminPage() {
       if (filters.view) params.append('view', filters.view);
       if (filters.block_reason) params.append('block_reason', filters.block_reason);
 
-      const response = await fetch(`/api/admin/logs?${params.toString()}`);
+      const response = await fetch(`/api/admin/logs?${params.toString()}`, { headers: adminHeaders() });
       const data: LogQueryResult = await response.json();
       
       setLogs(data.logs);
@@ -86,7 +94,7 @@ export default function AdminPage() {
 
   const fetchStats = async () => {
     try {
-      const response = await fetch('/api/admin/stats');
+      const response = await fetch('/api/admin/stats', { headers: adminHeaders() });
       const data: Statistics = await response.json();
       setStats(data);
     } catch (error) {
@@ -97,7 +105,7 @@ export default function AdminPage() {
   const fetchSetting = async () => {
     try {
       setLoadingSetting(true);
-      const response = await fetch('/api/admin/settings?key=enableAdClickCheck');
+      const response = await fetch('/api/admin/settings?key=enableAdClickCheck', { headers: adminHeaders() });
       const data = await response.json();
       setEnableAdClickCheck(data.value === 'true');
     } catch (error) {
@@ -113,6 +121,7 @@ export default function AdminPage() {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
+          ...adminHeaders(),
         },
         body: JSON.stringify({
           key: 'enableAdClickCheck',

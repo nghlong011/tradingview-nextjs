@@ -1,7 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getAccessLogs, getStatistics, LogQueryParams } from '@/lib/db';
+import { requireAdminAuth } from '@/lib/admin-auth';
+import { getAccessLogs, LogQueryParams } from '@/lib/db';
 
 export async function GET(request: NextRequest) {
+  const authError = requireAdminAuth(request);
+  if (authError) return authError;
   try {
     const searchParams = request.nextUrl.searchParams;
     

@@ -173,6 +173,12 @@ export class PostgresAdapter implements DatabaseAdapter {
         console.warn('Error adding user_agent_parsed column (may already exist):', error);
       }
 
+      try {
+        await pool.query(`ALTER TABLE access_logs ADD COLUMN IF NOT EXISTS botd_result TEXT`);
+      } catch (error) {
+        console.warn('Error adding botd_result column (may already exist):', error);
+      }
+
       // Tạo bảng settings
       await pool.query(`
         CREATE TABLE IF NOT EXISTS settings (
@@ -195,8 +201,8 @@ export class PostgresAdapter implements DatabaseAdapter {
       await retryWithBackoff(async () => {
         console.log('[POSTGRES] Inside retryWithBackoff, executing query...');
         const result = await pool.query(
-          `INSERT INTO access_logs (ip, view, block_reason, organization, asn, user_agent, user_agent_parsed, headers)
-           VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+          `INSERT INTO access_logs (ip, view, block_reason, organization, asn, user_agent, user_agent_parsed, headers, botd_result)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
            RETURNING id`,
           [
             log.ip,
@@ -207,6 +213,7 @@ export class PostgresAdapter implements DatabaseAdapter {
             log.user_agent || null,
             log.user_agent_parsed || null,
             log.headers || null,
+            log.botd_result || null,
           ]
         );
         

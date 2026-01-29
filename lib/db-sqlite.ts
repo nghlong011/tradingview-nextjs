@@ -68,6 +68,14 @@ function getDatabase(): Database.Database {
     }
   }
 
+  try {
+    dbInstance.exec(`ALTER TABLE access_logs ADD COLUMN botd_result TEXT`);
+  } catch (error: any) {
+    if (!error.message?.includes('duplicate column name')) {
+      console.warn('Error adding botd_result column:', error);
+    }
+  }
+
   return dbInstance;
 }
 
@@ -80,8 +88,8 @@ export class SQLiteAdapter implements DatabaseAdapter {
     try {
       const db = getDatabase();
       const stmt = db.prepare(`
-        INSERT INTO access_logs (ip, view, block_reason, organization, asn, user_agent, user_agent_parsed, headers)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        INSERT INTO access_logs (ip, view, block_reason, organization, asn, user_agent, user_agent_parsed, headers, botd_result)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
       `);
       
       stmt.run(
@@ -92,7 +100,8 @@ export class SQLiteAdapter implements DatabaseAdapter {
         log.asn || null,
         log.user_agent || null,
         log.user_agent_parsed || null,
-        log.headers || null
+        log.headers || null,
+        log.botd_result || null
       );
     } catch (error) {
       console.error('Error saving access log:', error);

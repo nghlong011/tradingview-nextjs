@@ -13,6 +13,7 @@ export interface AccessLog {
   user_agent?: string | null;
   user_agent_parsed?: string | null; // JSON string của parsed user-agent
   headers?: string | null; // JSON string của headers
+  botd_result?: string | null; // JSON string của BotD detection result
 }
 
 export interface LogQueryParams {

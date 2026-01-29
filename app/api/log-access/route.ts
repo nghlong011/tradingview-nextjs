@@ -1,9 +1,25 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { verifyApiToken } from '@/lib/auth-api';
+import { checkRateLimit, LOG_ACCESS_LIMIT } from '@/lib/rate-limit';
+import { getClientIp } from '@/lib/ip-analysis';
 import { saveAccessLog, AccessLog } from '@/lib/db';
 import { parseUserAgent } from '@/lib/ua-parser';
 
 export async function POST(request: NextRequest) {
   try {
+    const token = request.headers.get('x-api-key') ?? request.headers.get('authorization')?.replace(/^Bearer\s+/i, '') ?? null;
+    try {
+      await verifyApiToken(token);
+    } catch {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
+    const ip = getClientIp(request.headers) || 'unknown';
+    const rate = checkRateLimit(`log:${ip}`, LOG_ACCESS_LIMIT);
+    if (!rate.ok) {
+      return NextResponse.json({ error: 'Too many requests' }, { status: 429 });
+    }
+
     const body = await request.json();
     
     console.log('[API] Received log request:', {
@@ -11,6 +27,7 @@ export async function POST(request: NextRequest) {
       view: body.view,
       block_reason: body.block_reason,
       hasHeaders: !!body.headers,
+      hasBotdResult: !!body.botd_result,
     });
     
     // Parse user-agent
@@ -26,6 +43,7 @@ export async function POST(request: NextRequest) {
       user_agent: body.user_agent || null,
       user_agent_parsed: parsedUAJson,
       headers: body.headers || null,
+      botd_result: body.botd_result ?? null,
     };
 
     // Await saveAccessLog để đảm bảo được xử lý
