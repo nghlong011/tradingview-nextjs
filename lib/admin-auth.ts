@@ -58,7 +58,7 @@ export async function verifyAdminSessionToken(
     throw new Error('Invalid admin session token purpose');
   }
 
-  return payload as AdminSessionPayload;
+  return payload as unknown as AdminSessionPayload;
 }
 
 /**
