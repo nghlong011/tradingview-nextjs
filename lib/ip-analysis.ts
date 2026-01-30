@@ -133,6 +133,45 @@ export async function getAsnInfo(ip: string): Promise<{ asn: number | null; orga
 }
 
 /**
+ * Kiểm tra xem organization có phải là crawler/datacenter (Google, Bing, AWS, etc.) không
+ * Các IP này thường là bot/crawler hoặc datacenter → hiển thị ViewTwo
+ */
+export function isCrawlerOrDatacenterOrganization(organization: string | null): boolean {
+  if (!organization) {
+    return false;
+  }
+  const orgLower = organization.toLowerCase();
+  const crawlerOrDatacenterNames = [
+    'google',
+    'google llc',
+    'google cloud',
+    'google inc',
+    'bing',
+    'microsoft bing',
+    'amazon',
+    'aws',
+    'cloudflare',
+    'facebook',
+    'meta',
+    'apple',
+    'yandex',
+    'baidu',
+    'duckduckgo',
+    'yahoo',
+    'alibaba',
+    'tencent',
+    'digital ocean',
+    'linode',
+    'vultr',
+    'ovh',
+    'hetzner',
+    'softlayer',
+    'ibm cloud',
+  ];
+  return crawlerOrDatacenterNames.some(name => orgLower.includes(name));
+}
+
+/**
  * Kiểm tra xem organization có phải là proxy/VPN không
  * Dựa vào keywords trong organization name
  */
@@ -525,6 +564,20 @@ export async function analyzeIpAccess(
         details: {
           ip,
           organization: null,
+          asn: asnInfo.asn,
+        },
+      };
+    }
+
+    // 5b. Kiểm tra organization crawler/datacenter (Google, AWS, etc.) → ViewTwo
+    if (isCrawlerOrDatacenterOrganization(asnInfo.organization)) {
+      console.log(`Blocked: Crawler/datacenter organization for IP ${ip}, Organization: ${asnInfo.organization}`);
+      return {
+        allowed: false,
+        reason: 'CRAWLER_OR_DATACENTER_ORG',
+        details: {
+          ip,
+          organization: asnInfo.organization,
           asn: asnInfo.asn,
         },
       };

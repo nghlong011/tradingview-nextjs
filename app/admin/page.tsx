@@ -159,6 +159,7 @@ export default function AdminPage() {
     NO_IP: 'Không có IP',
     LOCALHOST_PRODUCTION: 'Localhost trong production',
     NO_ASN_ORGANIZATION: 'Không có ASN organization',
+    CRAWLER_OR_DATACENTER_ORG: 'Crawler/Datacenter (Google, AWS, …)',
     PROXY_VPN_DETECTED: 'Phát hiện Proxy/VPN',
     BUSINESS_IP_DETECTED: 'Phát hiện IP doanh nghiệp',
     BOT_DETECTED: 'Phát hiện Bot (Googlebot, Bingbot, etc.)',
