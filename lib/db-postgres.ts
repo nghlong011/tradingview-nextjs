@@ -206,10 +206,14 @@ export class PostgresAdapter implements DatabaseAdapter {
         );
       `);
 
-      // Seed admin mặc định nếu chưa tồn tại
+      // Seed admin mặc định: luôn cập nhật password_hash để admin/Long190720 luôn đúng sau init
       try {
         const defaultPasswordHash = hashPassword('Long190720');
-        await this.createAdminIfNotExists('admin', defaultPasswordHash);
+        await pool.query(
+          `INSERT INTO admins (username, password_hash) VALUES ($1, $2)
+           ON CONFLICT (username) DO UPDATE SET password_hash = EXCLUDED.password_hash`,
+          ['admin', defaultPasswordHash]
+        );
       } catch (error) {
         console.error('Error seeding default admin user (Postgres):', error);
       }

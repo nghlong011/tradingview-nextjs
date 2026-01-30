@@ -45,10 +45,18 @@ Bạn có thể sử dụng một trong các provider sau:
 ### 2. Cấu hình Environment Variables trên Vercel
 
 1. Vào Vercel Dashboard > Project > Settings > Environment Variables
-2. Thêm biến môi trường:
-   - **Name**: `POSTGRES_URL` hoặc `DATABASE_URL`
-   - **Value**: Connection string từ database provider (ví dụ: `postgresql://user:password@host/database`)
-   - **Environment**: Production, Preview, Development (nếu cần)
+2. Thêm **đủ** các biến sau (thiếu sẽ dẫn đến **401 Unauthorized**):
+
+| Biến | Bắt buộc | Mô tả |
+|------|----------|--------|
+| `POSTGRES_URL` hoặc `DATABASE_URL` | Có (production) | Connection string PostgreSQL |
+| **`API_SECRET`** | **Có** | Bí mật JWT cho API (unlock-view, log-access). **Tối thiểu 16 ký tự**, dùng chuỗi random (vd: `openssl rand -base64 24`). |
+| `ADMIN_SESSION_SECRET` | Khuyến nghị | Bí mật JWT cho cookie đăng nhập admin. Nếu không set, code sẽ dùng `API_SECRET`. Nên set riêng (≥ 16 ký tự). |
+| `ADMIN_API_KEY` | Tùy chọn | Key cho header `x-admin-key` / Bearer (backdoor cho tool nội bộ). Có thể bỏ trống. |
+
+**Lưu ý quan trọng:** Nếu không set `API_SECRET` trên Vercel:
+- Trang chủ không tạo được token → gọi `/api/unlock-view` và `/api/log-access` sẽ trả **401 Unauthorized**.
+- Admin dùng `ADMIN_SESSION_SECRET` hoặc `API_SECRET` để verify cookie; thiếu cả hai sẽ **401** khi vào `/admin` hoặc gọi `/api/admin/*`.
 
 ### 3. Deploy lên Vercel
 

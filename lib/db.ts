@@ -55,9 +55,11 @@ function getAdapter(): DatabaseAdapter {
 }
 
 /**
- * Đảm bảo database được khởi tạo (cho Postgres)
+ * Đảm bảo database được khởi tạo (cho Postgres).
+ * Gọi getAdapter() trước để trigger init + seed, rồi mới await — tránh đăng nhập trước khi admin được tạo.
  */
 async function ensureInitialized(): Promise<void> {
+  getAdapter(); // trigger init (và seed admin) nếu chưa chạy
   if (initPromise) {
     await initPromise;
   }
