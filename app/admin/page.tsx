@@ -60,6 +60,11 @@ export default function AdminPage() {
   });
   const [enableAdClickCheck, setEnableAdClickCheck] = useState<boolean>(false);
   const [loadingSetting, setLoadingSetting] = useState(true);
+  const [googleTagId, setGoogleTagId] = useState<string>('');
+  const [loadingGoogleTag, setLoadingGoogleTag] = useState(true);
+  const [savingGoogleTag, setSavingGoogleTag] = useState(false);
+  const [googleTagEnabled, setGoogleTagEnabled] = useState<boolean>(false);
+  const [loadingGoogleTagEnabled, setLoadingGoogleTagEnabled] = useState(true);
 
   const fetchLogs = async () => {
     setLoading(true);
@@ -109,6 +114,65 @@ export default function AdminPage() {
     }
   };
 
+  const fetchGoogleTag = async () => {
+    try {
+      setLoadingGoogleTag(true);
+      const response = await fetch('/api/admin/settings?key=googleTagId');
+      const data = await response.json();
+      setGoogleTagId(data.value ?? '');
+    } catch (error) {
+      console.error('Error fetching googleTagId:', error);
+    } finally {
+      setLoadingGoogleTag(false);
+    }
+  };
+
+  const fetchGoogleTagEnabled = async () => {
+    try {
+      setLoadingGoogleTagEnabled(true);
+      const response = await fetch('/api/admin/settings?key=googleTagEnabled');
+      const data = await response.json();
+      setGoogleTagEnabled(data.value === 'true');
+    } catch (error) {
+      console.error('Error fetching googleTagEnabled:', error);
+    } finally {
+      setLoadingGoogleTagEnabled(false);
+    }
+  };
+
+  const updateGoogleTagEnabled = async (value: boolean) => {
+    try {
+      const response = await fetch('/api/admin/settings', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ key: 'googleTagEnabled', value: value.toString() }),
+      });
+      if (response.ok) {
+        setGoogleTagEnabled(value);
+      }
+    } catch (error) {
+      console.error('Error updating googleTagEnabled:', error);
+    }
+  };
+
+  const saveGoogleTag = async () => {
+    try {
+      setSavingGoogleTag(true);
+      const response = await fetch('/api/admin/settings', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ key: 'googleTagId', value: googleTagId.trim() }),
+      });
+      if (response.ok) {
+        setGoogleTagId(googleTagId.trim());
+      }
+    } catch (error) {
+      console.error('Error saving googleTagId:', error);
+    } finally {
+      setSavingGoogleTag(false);
+    }
+  };
+
   const updateSetting = async (value: boolean) => {
     try {
       const response = await fetch('/api/admin/settings', {
@@ -136,6 +200,8 @@ export default function AdminPage() {
     fetchLogs();
     fetchStats();
     fetchSetting();
+    fetchGoogleTag();
+    fetchGoogleTagEnabled();
   }, [page]);
 
   useEffect(() => {
@@ -212,6 +278,46 @@ export default function AdminPage() {
                   enableAdClickCheck ? 'translate-x-6' : 'translate-x-1'
                 }`}
               />
+            </button>
+          </div>
+        </div>
+
+        {/* Google Tag (Quảng cáo) */}
+        <div className="bg-slate-900 rounded-lg p-4 border border-slate-800 mb-6">
+          <div className="flex items-center justify-between mb-1">
+            <h2 className="text-lg font-semibold">Google Tag (Quảng cáo)</h2>
+            <button
+              onClick={() => updateGoogleTagEnabled(!googleTagEnabled)}
+              disabled={loadingGoogleTagEnabled}
+              className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
+                googleTagEnabled ? 'bg-emerald-500' : 'bg-slate-600'
+              } ${loadingGoogleTagEnabled ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}
+            >
+              <span
+                className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                  googleTagEnabled ? 'translate-x-6' : 'translate-x-1'
+                }`}
+              />
+            </button>
+          </div>
+          <p className="text-sm text-slate-400 mb-3">
+            Bật/tắt để bật hoặc tắt script trên site; ID bên dưới vẫn được lưu khi nhấn Lưu. Hỗ trợ GTM (GTM-XXXXXX) hoặc GA4 (G-XXXXXXXX).
+          </p>
+          <div className="flex flex-wrap items-center gap-3">
+            <input
+              type="text"
+              value={googleTagId}
+              onChange={(e) => setGoogleTagId(e.target.value)}
+              placeholder="GTM-XXXXXX hoặc G-XXXXXXXX"
+              disabled={loadingGoogleTag}
+              className="flex-1 min-w-[200px] px-3 py-2 rounded-md bg-slate-800 border border-slate-600 text-slate-100 placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent disabled:opacity-50"
+            />
+            <button
+              onClick={saveGoogleTag}
+              disabled={loadingGoogleTag || savingGoogleTag}
+              className="px-4 py-2 rounded-md bg-emerald-600 hover:bg-emerald-500 text-white text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+            >
+              {savingGoogleTag ? 'Đang lưu...' : 'Lưu'}
             </button>
           </div>
         </div>
