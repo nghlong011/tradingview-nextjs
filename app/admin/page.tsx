@@ -288,10 +288,11 @@ export default function AdminPage() {
             <h2 className="text-lg font-semibold">Google Tag (Quảng cáo)</h2>
             <button
               onClick={() => updateGoogleTagEnabled(!googleTagEnabled)}
-              disabled={loadingGoogleTagEnabled}
+              disabled={loadingGoogleTagEnabled || (!googleTagId.trim() && !googleTagEnabled)}
+              title={!googleTagId.trim() && !googleTagEnabled ? 'Nhập và lưu Google Tag ID trước khi bật' : undefined}
               className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
                 googleTagEnabled ? 'bg-emerald-500' : 'bg-slate-600'
-              } ${loadingGoogleTagEnabled ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}
+              } ${loadingGoogleTagEnabled || (!googleTagId.trim() && !googleTagEnabled) ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}
             >
               <span
                 className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
@@ -301,7 +302,7 @@ export default function AdminPage() {
             </button>
           </div>
           <p className="text-sm text-slate-400 mb-3">
-            Bật/tắt để bật hoặc tắt script trên site; ID bên dưới vẫn được lưu khi nhấn Lưu. Hỗ trợ GTM (GTM-XXXXXX) hoặc GA4 (G-XXXXXXXX).
+            Để bật tính năng này cần thêm Google Tag ID. Hỗ trợ GTM (GTM-XXXXXX) hoặc GA4 (G-XXXXXXXX).
           </p>
           <div className="flex flex-wrap items-center gap-3">
             <input
